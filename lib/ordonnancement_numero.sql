@@ -121,4 +121,78 @@
 	--test
 	SELECT outils_geocodage.numerotation2float('48 ante')  ;
 
+
+	DROP FUNCTION IF EXISTS outils_geocodage.estContigueA(numerotation1 text, numerotation2 text, OUT estContigueA boolean) ;
+	CREATE OR REPLACE FUNCTION outils_geocodage.estContigueA(numerotation1 text, numerotation2 text, OUT estContigueA boolean)   AS 
+	$$
+	DECLARE   
+	BEGIN  
+		estContigueA :=  outils_geocodage.estContigueA(outils_geocodage.numerotation2float(numerotation1 ), outils_geocodage.numerotation2float(numerotation2)) ;
+		RETURN ; 
+	END ; 
+	$$
+	LANGUAGE 'plpgsql' IMMUTABLE STRICT ; 
+
+	
+
+	DROP FUNCTION IF EXISTS outils_geocodage.estContigueA(numerotation1 float, numerotation2 float, OUT estContigueA boolean) ;
+	CREATE OR REPLACE FUNCTION outils_geocodage.estContigueA(numerotation1 float, numerotation2 float, OUT estContigueA boolean)   AS 
+	$$
+		-- prend deux numerotation, puis regarde si ces deux numerotations peuvent etre contigues, par exemple 5 et 7 sont contigue, comme 5 et 7a,
+		-- comme 4 et 5 (numerotation des places)
+	DECLARE  
+		_num1f float := numerotation1;
+		_num2f float := numerotation2; 
+	BEGIN 
+		 -- converti chaque numerotation en un float
+		 -- trier du plus petit au plus gros 
+		 -- dans tous les cas : dist <3
+		 -- si deux suffixe : 
+		 -- si un suffixe : 
+			-- si suffixe du bas : 
+		 -- la distance ntre les deux floats devrait etre <3
+		 estContigueA := abs(_num1f - _num2f) < 3 ; 
+
+		_num1f := LEAST(_num1f,_num2f) ;
+		_num2f := GREATEST(_num1f,_num2f) ;
+
+		-- RAISE NOTICE '% %', _num1f, _num2f ; 
+		
+		 -- si dist >= 3 : ne peut pas etre contigue
+		 IF abs(_num1f - _num2f) >=3 THEN
+			estContigueA := FALSE
+			RETURN ; 
+		 END IF ; 
+
+		 -- si pas de suffixe pour les deux : la distance doit etre inferrieur ou egal a deux
+		 IF _num1f = _num1f::int AND _num2f= _num2f::int THEN
+			estContigueA := abs(_num1f - _num2f) <=2;  
+			RETURN ; 
+		 END IF ;
+
+		 --si le premier numero a un suffixe , la distance au deuximee numero doit etre inferieur a 3, on ne peut pas en dire plus
+
+		IF _num2f !=  _num2f::int THEN  
+			IF abs(_num2f  -  _num2f::int -  0.01 ) < 0.0001THEN -- cas ou c'est le premier suffixe de ce numero  
+				-- si le suffixe est 0.1: le deuxieme numero  ne doit pas etre le meme numero 
+				estContigueA :=  _num1f::int !=  _num2f::int ; 
+				RETURN ; 
+			END IF ;  
+			estContigueA :=  abs(_num2f-0.01  -   _num1f) < 0.0001 ;
+		END IF ; 
+		 -- si le deuxieme numero a un suffixe 
+			-- si le suffixe est 0.1: le deuxieme numero doit etre le meme numero
+			-- sinon , le suffixe doit etre celui d'avant
+ 
+		RETURN ;
+	END;
+	$$
+	LANGUAGE 'plpgsql' IMMUTABLE STRICT ; 
+
+	SELECT outils_geocodage.estContigueA(n1, n2)
+	FROM CAST('48 ' AS text) AS n1
+		, CAST('50' AS text) AS n2 ; 
+
+		
+	SELECT outils_geocodage.estContigueA(48,48.02)  ; 
 	
