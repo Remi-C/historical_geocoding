@@ -104,7 +104,7 @@ CREATE TABLE IF NOT EXISTS normalised_name_alias(
 	, normalised_name_2 text NOT NULL -- normalised name alias of a geohistorical object
 	, preference_ratio float NOT NULL CHECK ( preference_ratio>0 ), -- name_1 = preference_ratio  * name_2 , in usage value
 	UNIQUE (short_historical_source_name_1, normalised_name_1, short_historical_source_name_2, normalised_name_2) -- this constraint ensure that the same equivalence is not defined several times 
-	 
+	 , check (false) NO INHERIT
 ); 
 
  
@@ -119,7 +119,7 @@ CREATE TABLE IF NOT EXISTS geohistorical_object.geohistorical_object (
 	historical_source text REFERENCES geohistorical_object.historical_source ( short_name) NOT NULL, -- link to the historical source, mandatory
 	numerical_origin_process text REFERENCES geohistorical_object.numerical_origin_process (  short_name) NOT NULL, -- link to the origin process, mandatory
 	 UNIQUE (normalised_name, geom) --adding a constraint to limit duplicates (obvious errors here) 
-	 
+	 , check (false) NO INHERIT
 ); 
  
 -- @TODO : add a mechanism to ensure geohistorical_object is always empty
@@ -258,6 +258,9 @@ permet de mettre en évidence cette mutation.'
 		my_custom_uid serial PRIMARY KEY 
 	)
 	INHERITS (geohistorical_object.geohistorical_object) ; 
+	ALTER TABLE test_geohistorical_object ADD CONSTRAINT historical_source_short_name FOREIGN KEY (historical_source) REFERENCES geohistorical_object.historical_source ( short_name) ;  
+	ALTER TABLE test_geohistorical_object ADD CONSTRAINT numerical_origin_process_short_name FOREIGN KEY (numerical_origin_process) REFERENCES geohistorical_object.numerical_origin_process ( short_name) ; 
+	
 
 	-- adding indexes  
 	CREATE INDEX ON test_geohistorical_object  USING GIST(geom) ;
@@ -270,13 +273,22 @@ permet de mettre en évidence cette mutation.'
 	INSERT INTO test_geohistorical_object VALUES (
 	'rue saint étienne à Paris', 'rue saint etienne, Paris',   ST_GeomFromEWKT('SRID=2154;LINESTRING(0 0 , 10 10, 20 10)')	
 	, NULL, NULL
-	,'jacoubet_paris',  'default_human_manual'  , 1),
+	,'jacoubet_paris',  'default_human_manual'  ),
 	(
 	'r. st-étienne à Paris', 'r. saint etienne, Paris',   ST_GeomFromEWKT('SRID=2154;LINESTRING(1 1 , 11 11, 21 11)')	
 	,  sfti_makesfti('08-06-1888'::date,'08-06-1888','01-09-1888','01-10-1888'), 3
-	,'poubelle_municipal_paris',  'default_computer_automatic'   , 2) ; 
+	,'poubelle_municipal_paris',  'default_computer_automatic'   ) ; 
 
-	 
+	DROP TABLE IF EXISTS test_geohistorical_object_2 CASCADE; 
+	CREATE TABLE test_geohistorical_object_2 (
+		example_additional_column serial PRIMARY KEY 
+	) INHERITS (test_geohistorical_object)  ; 
+
+	DROP TABLE IF EXISTS test_geohistorical_object_3 CASCADE; 
+	CREATE TABLE test_geohistorical_object_3 (
+		example_additional_column serial PRIMARY KEY 
+	) INHERITS (test_geohistorical_object,  geohistorical_object.normalised_name_alias)  ; 
+
 ---- geohistorical_object.normalised_name_alias 
 -- THIS TABLE SHOULD REMAIN EMPTY ! 
 -- instead, create a new table and inherit from it
@@ -299,3 +311,133 @@ permet de mettre en évidence cette mutation.'
 	INSERT INTO test_normalised_name_alias VALUES 
 	('jacoubet_paris', 'rue saint etienne, Paris', 'poubelle_municipal_paris', 'r. saint etienne, Paris', 2)
 	, (NULL, 'rue saint etienne', NULL, 'rue Saint-Etienne, Paris', 0.1) ;
+
+	
+
+-- @TODO  : foreign keys are not inherited
+/* --need to define a function that will create the foreign keys appropriatly
+	2 cases : to distinguish, look for target column name (fixed through inheritance) 
+		geohistorical_object --> check if foreign key already exists, add foreign key to historical_source and numerical_origin_process
+		normalised_name_alias --> check if foregin key already exists , add foreign keys to historical_source 
+*/
+
+SELECT 'geohistorical_object.geohistorical_object'::regclass
+
+SELECT *
+FROM   pg_catalog.pg_class c
+    JOIN   pg_catalog.pg_namespace n ON n.oid = c.relnamespace
+    WHERE relname = 'geohistorical_object.geohistorical_object'::regclass::text
+
+DROP FUNCTION IF EXISTS geohistorical_object.enable_disable_geohistorical_object(   IN fulltablename regclass); 
+CREATE OR REPLACE FUNCTION geohistorical_object.enable_disable_geohistorical_object(   IN fulltablename regclass)
+RETURNS text AS 
+	$BODY$
+		--@brief : this function takes a table name, check if it inherits from geohistorical_object or normalised_name_alias, then add foreign key if necessary 
+		DECLARE  
+			_isobj record; 
+			_isalias record; 
+			_isobjb boolean;
+			_isaliasb boolean ; 
+			_r record; 
+			_fk_exists record; 
+			_fk_existsb boolean ; 
+		BEGIN 
+			-- get schema and table name from input
+			
+			-- check if input table is in the list of tables that inherits from 'geohistorical_object' and/or from 'normalised_name_alias' 
+				SELECT children INTO _isobj
+				FROM  find_all_children_in_inheritance('geohistorical_object.geohistorical_object')
+				WHERE children = fulltablename
+				LIMIT 1 ;
+				SELECT children INTO _isaliasj
+				FROM  find_all_children_in_inheritance('geohistorical_object.normalised_name_alias')
+				WHERE children = fulltablename
+				LIMIT 1 ;
+
+				_isobjb := _isobj IS NOT NULL; 
+				_isaliasb := _isalias IS NOT NULL;  
+
+				
+			IF _isobjb IS TRUE THEN
+				-- 2 foregin key to add
+					
+					FOR  _r IN SELECT 'historical_source' as stn, 'geohistorical_object' as sn, 'historical_source' as tn, 'short_name' AS cn 
+						UNION ALL  SELECT 'numerical_origin_process' as stn, 'geohistorical_object','numerical_origin_process', 'short_name'
+					LOOP
+						--for each, check if the foreign key exist, if not , create it
+						 _fk_exists := geohistorical_object.find_foregin_key_between_source_and_target(  'geohistorical_object', 'test_geohistorical_object', _r.stn,_r.sn, _r.tn, _r.cn ) ; 
+					END LOOP; 
+				--checking if the foreign key
+			END IF ; 
+				 
+			-- check if foreign key already exists
+			
+			-- add/delete foreign keys.
+		 
+		RETURN 'the foreign key to geohistorical_object.historical_source and/or  to geohistorical_object.numerical_origin_process were removed';
+		END ; 
+	$BODY$
+LANGUAGE plpgsql  IMMUTABLE STRICT; 
+
+
+
+DROP FUNCTION IF EXISTS geohistorical_object.find_all_children_in_inheritance(   IN parent_table_full_name regclass); 
+CREATE OR REPLACE FUNCTION geohistorical_object.find_all_children_in_inheritance(   IN parent_table_full_name regclass)
+RETURNS table(children_table regclass) AS 
+	$BODY$
+		--@brief : given a parent table, look for all the tables that inherit from it (several level of inheritance allowed)
+		DECLARE      
+		BEGIN 
+		 RETURN QUERY 
+			SELECT children FROM (
+		   WITH RECURSIVE inh AS (
+			SELECT i.inhrelid FROM pg_catalog.pg_inherits i WHERE inhparent = parent_table_full_name::regclass
+			UNION
+			SELECT i.inhrelid FROM inh INNER JOIN pg_catalog.pg_inherits i ON (inh.inhrelid = i.inhparent)
+		)
+		SELECT pg_namespace.nspname AS father , pg_class.relname::regclass AS children
+		    FROM inh 
+		      INNER JOIN pg_catalog.pg_class ON (inh.inhrelid = pg_class.oid) 
+		      INNER JOIN pg_catalog.pg_namespace ON (pg_class.relnamespace = pg_namespace.oid)
+		      ) AS sub;
+
+		RETURN ;
+		END ; 
+	$BODY$
+LANGUAGE plpgsql  IMMUTABLE STRICT; 
+
+
+
+DROP FUNCTION IF EXISTS geohistorical_object.find_foregin_key_between_source_and_target(   source_schema text, source_table text, source_column text,
+	target_schema text, target_table text, target_column text); 
+CREATE OR REPLACE FUNCTION geohistorical_object.find_foregin_key_between_source_and_target(   source_schema text, source_table text, source_column text,
+	target_schema text, target_table text, target_column text)
+RETURNS table(constraint_catalog text, constraint_schema text, constraint_name text) AS 
+	$BODY$
+		--@brief : given a source and target table and columns, returns the foreign keys if it exists
+		DECLARE      
+		BEGIN 
+			-- conver
+			RETURN QUERY 
+
+			SELECT tc.constraint_catalog::text , tc.constraint_schema::text  , tc.constraint_name::text
+			FROM information_schema.table_constraints tc 
+			INNER JOIN information_schema.constraint_column_usage ccu 
+			  USING (constraint_catalog, constraint_schema, constraint_name) 
+			INNER JOIN information_schema.key_column_usage kcu 
+			  USING (constraint_catalog, constraint_schema, constraint_name) 
+			WHERE constraint_type = 'FOREIGN KEY' 
+			  AND tc.table_schema = source_schema
+			  AND tc.table_name = source_table
+			  AND kcu.column_name = source_column
+			    AND ccu.table_schema = target_schema
+			    AND ccu.table_name = target_table
+			    AND ccu.column_name = target_column; 
+		RETURN ;
+		END ; 
+	$BODY$
+LANGUAGE plpgsql  IMMUTABLE STRICT; 
+
+SELECT *
+FROM geohistorical_object.find_foregin_key_between_source_and_target(  'geohistorical_object', 'test_geohistorical_object', 'historical_source','geohistorical_object', 'historical_source', 'short_name' ) ; 
+ 
