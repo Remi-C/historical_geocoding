@@ -35,6 +35,8 @@ We use the postgres inheritance mechanism to ensure felxibility and extensibilit
 ### Base infrastructure for geohistorical objects
 #### historical_source ####
 Before putting anything in the geohistorical database, we define the historical sources.
+
+
 `historical_source` :
  - historical sources are designated by a unique `short_name`, 
  - equivalent to a more correct `full_name`.
@@ -46,6 +48,7 @@ Before putting anything in the geohistorical database, we define the historical 
 Each `geohistorical_object` in the database is in fact an interpretation of a real historical document.
 It is then essential to document the way this interpretation was made, that is the origin of the informatic data to be stored in the database.
 For instance, the interpretation may be the result of an automatic computing process, or may be the result of a specialised human.
+
 
 `type_of_origin` : 
  - origin are designated by unique `short_name`,
@@ -77,6 +80,7 @@ As such, we define a table that defines relations between two different names th
 For instance `rue de la tour du marais` may be estimated as identical as `rue de la tour`.
 Furthermore, one form may be prefered.
 
+
 table `name_alias` : 
  - `historical_source` : the relation is always defined for a given historical source
  - `normalised_name_1` the first name in the relation
@@ -97,6 +101,7 @@ It is the potential localisation of an adress.
 For instance we may extract from an historical source the fact that a given building has the number 12B.
 This is a localisation, but only potential, because without the associated road name, the adress is ambiguous.
 
+
 table `adress_localisation` :
  - `localisation` a geohistorical object that may be associated with the localisation of a potential adress
  - `associated_road_name` : an adress localisation may be associated to a road name so the adress is less ambiguous.
@@ -105,6 +110,7 @@ table `adress_localisation` :
 
 the second is `named_road`.
 It is constitued of road axis, which if course have a name (potentially aliased).
+
 
 table `named_road` : 
  - the `road_axis` field is the geohistorical object representing the road axis and the road name 
