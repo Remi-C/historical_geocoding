@@ -45,7 +45,7 @@ Before putting anything in the geohistorical database, we define the historical 
  - Sources also have `default_spatial_precision`, which is in fact a dictionnary defining the spatial precision for the different type of objects in this source. For instance a source may contain building (precision 1 m) and road axis (precision 2 m)
  
 #### type_of_origin ####
-Each `geohistorical_object` in the database is in fact an interpretation of a real historical document.
+Each `geohistorical_object` in the database is in fact the result of an interpretation process of a real historical document.
 It is then essential to document the way this interpretation was made, that is the origin of the informatic data to be stored in the database.
 For instance, the interpretation may be the result of an automatic computing process, or may be the result of a specialised human.
 
@@ -54,8 +54,8 @@ For instance, the interpretation may be the result of an automatic computing pro
  - origin are designated by unique `short_name`,
  - equivalent to a more correct `full_name`.
  - another `description` field allow to explain in detail this origin.
- - a `fuzzy_date`
- - origin may also be associated with `default_spatial_precision`, which is a simple value giving the default spatial precision of an interpretation process. 
+ - a `fuzzy_date`, that *represents the date of the numerizing process*, usually not a long time ago ! 
+ - origin may also be associated with `default_spatial_precision`, which is a simple value giving the default spatial precision of the interpretation process. For instance an automatic interpretation process may have an estimated precision of 10 meters, where an human would have an estimated precision of 1 meters.
  
 
 #### Geohistorical objects ####
