@@ -55,8 +55,8 @@ FROM CAST ( '{"default": 0.2, "road_axis":2.5, "building":0.9}' AS json )  as f1
 	  
 
 
-DROP FUNCTION IF EXISTS geohistorical_object.enable_disable_geohistorical_object(   schema_name regclass, table_name regclass, activate_desactivate boolean); 
-CREATE OR REPLACE FUNCTION geohistorical_object.enable_disable_geohistorical_object(    schema_name regclass, table_name regclass, activate_desactivate boolean )
+DROP FUNCTION IF EXISTS geohistorical_object.enable_disable_geohistorical_object(   schema_name text, table_name regclass, activate_desactivate boolean); 
+CREATE OR REPLACE FUNCTION geohistorical_object.enable_disable_geohistorical_object(    schema_name text, table_name regclass, activate_desactivate boolean )
 RETURNS text AS 
 	$BODY$
 		--@brief : this function takes a table name, check if it inherits from geohistorical_object or normalised_name_alias. If activate is true, add foregin key, else remove it 
