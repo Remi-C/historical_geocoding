@@ -40,6 +40,7 @@ DROP TABLE IF EXISTS geohistorical_object.historical_source;
 CREATE TABLE IF NOT EXISTS geohistorical_object.historical_source( 
 UNIQUE (short_name)
 ) INHERITS (geohistorical_object.source_object_template)  ;
+ALTER TABLE geohistorical_object.historical_source ADD PRIMARY KEY (short_name) ; 
 -- some precisions : 
 -- fuzzy date : an historical source is an interpretation of the real world at a given period. The default fuzzy date represent this period.
 	-- for instance, a copy (1879) of the original map (printing 1856) where the information was acquired between 1850 and 1854 should have a fuzzy date of 1850-1854.
@@ -54,6 +55,7 @@ DROP TABLE IF EXISTS geohistorical_object.numerical_origin_process CASCADE;
 CREATE TABLE IF NOT EXISTS geohistorical_object.numerical_origin_process( 
 UNIQUE (short_name)
 ) INHERITS (geohistorical_object.source_object_template)  ;
+ALTER TABLE geohistorical_object.numerical_origin_process ADD PRIMARY KEY (short_name) ; 
 -- some precisions : 
 -- fuzzy date : this table represent the process of transforming a real worl historical source into numeric data.
 	-- the date is then the date of this process ! 
