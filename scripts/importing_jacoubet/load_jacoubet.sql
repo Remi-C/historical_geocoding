@@ -6,7 +6,7 @@
 -- import et normalisation du plan de Paris de Jacoubet de Benoit
 -- 
 --------------------------------
-
+  CREATE EXTENSION IF NOT EXISTS postal ; 
   CREATE EXTENSION IF NOT EXISTS postgis ; 	
   CREATE SCHEMA IF NOT EXISTS jacoubet_paris ; 
   SET search_path to jacoubet_paris, historical_geocoding, geohistorical_object, public; 
@@ -257,22 +257,112 @@
 		
 	DROP TABLE IF EXISTS jacoubet_src_number_quartier_error;
 	CREATE TABLE IF NOT EXISTS jacoubet_src_number_quartier_error AS  
-		WITH agglomerating_quartier AS (
+		WITH agglomerating_quartier_1 AS (
 			SELECT cq, ST_Buffer( ST_Union(ST_Buffer(geom,500)),-470) AS agg_geom, count(*) as nb_members
-			FROM jacoubet_src_number, clean_text(quartier) AS cq
+				, count(*) as c 
+			FROM jacoubet_src_number, CAST (quartier AS text) AS cq --clean_text(quartier) AS cq
 			WHERE quartier is not null
 			GROUP BY cq
+			ORDER BY cq ASC, c DESC
 		)
-		SELECT row_number() over() as qgis_id, cq AS cleaned_quartier, nb_members, ST_Area(agg_geom) AS quartier_area, ST_SetSRID(ST_Multi(agg_geom),932007)::geometry(multipolygon,932007)
+		 , agglomerating_quartier AS (
+			SELECT DISTINCT ON (clean_text(cq)) *
+			FROM agglomerating_quartier_1
+			ORDER BY  clean_text(cq), c DESC
+		)
+		SELECT row_number() over() as qgis_id, cq AS cleaned_quartier, nb_members, ST_Area(agg_geom) AS quartier_area 
+			, ST_SetSRID(ST_Multi(agg_geom),932007)::geometry(multipolygon,932007) AS geom 
 		FROM agglomerating_quartier ;  
 		ALTER TABLE jacoubet_src_number_quartier_error ADD PRIMARY KEY (qgis_id) ; 
 
+	SELECT *
+	FROM jacoubet_src_number_quartier_error 
+	ORDER BY cleaned_quartier; 
 
+	--inserting quartier in rough_localisation
+		--SELECT max(gid) FROM jacoubet_axis ; 
+		--ALTER SEQUENCE jacoubet_paris.jacoubet_axis_gid_seq INCREMENT BY 4266 ; 
+	INSERT INTO jacoubet_axis (historical_name, normalised_name, geom, specific_fuzzy_date, specific_spatial_precision, historical_source, numerical_origin_process)
+		SELECT
+			cleaned_quartier AS historical_name
+			,geohistorical_object.clean_text(cleaned_quartier)   AS normalised_name
+			,ST_Transform(geom , 2154) AS geom
+			,NULL AS specific_fuzzy_date
+			,NULL AS specific_spatial_precision 
+			, 'jacoubet_paris' AS historical_source
+			, 'jacoubet_paris_number' AS numerical_origin_process  
+	FROM jacoubet_src_number_quartier_error ; 
+		
 
-	
+	-- checking potential errors in nom_entier (road_name)
 	SELECT  ct, count(*)
 	FROM jacoubet_src_axis, clean_text(nom_entier) as ct
 	GROUP BY ct
-	ORDER BY ct
-	LIMIT 100 ;  
+	ORDER BY ct; 
+
+	SELECT *
+	FROM jacoubet_src_number
+	LIMIT 1 
+
+	DROP TABLE IF EXISTS jacoubet_src_number_ambiguity ;
+		CREATE TABLE jacoubet_src_number_ambiguity AS 
+		WITH road_name AS ( -- creating a list of distinct names, agglomerating the geom for each distinct name
+			SELECT   row_number() over(order by nom_entier) as id, nom_entier, count(*) AS c
+				, ST_Union(geom) as geom
+			FROM jacoubet_src_number
+			WHERE nom_entier is not null
+			GROUP BY nom_entier
+			ORDER BY nom_entier  ASC  
+		)
+		SELECT row_number() over() as qgis_id, rn1.id AS id1, rn1.nom_entier AS nom1, rn1.c AS count1
+				, rn2.id AS id2, rn2.nom_entier AS nom2 , rn2.c AS count2
+				, sim, spatial_dist::int
+				, ST_SetSRID(ST_Multi(ST_Union(ARRAY[ST_Buffer(rn1.geom,3), ST_Buffer(rn2.geom,3), ST_Buffer(ST_shortestline(rn1.geom,rn2.geom),1)])),2154)::geometry(multipolygon,2154)
+					as geom
+				, true::boolean is_this_a_problem
+		FROM road_name AS rn1
+			, road_name as rn2
+			,  similarity(rn1.nom_entier, rn2.nom_entier) as sim -- similarity in a semantic way
+			, st_distance(rn1.geom, rn2.geom) AS spatial_dist --distance in a spatial way
+			WHERE rn1.id  > rn2.id
+				AND sim > 0.7
+				AND spatial_dist < 500
+		ORDER BY sim ASC ; 
+		ALTER TABLE jacoubet_src_number_ambiguity ADD PRIMARY KEY (qgis_id) ; 
+
+		SELECT *
+		FROM jacoubet_src_number_ambiguity 
+		WHERE nom1 NOT ILIKE '%Neuve%' AND nom2 NOT ILIKE '%Neuve%' 
+		ORDER BY sim DESC , spatial_dist desc; 
+
+		
+
+	--inserting number 
+	SELECT count(*)
+	FROM jacoubet_src_number
+	LIMIT 1 ; 
+
+	SELECT *
+	FROM jacoubet_number
+	LIMIT 1 ; 
+
+
+	
+	INSERT INTO jacoubet_number (historical_name, normalised_name, geom, specific_fuzzy_date, specific_spatial_precision, historical_source, numerical_origin_process, associated_normalised_rough_name, id_num_sca, id_parc, quartier)
+		SELECT full_name AS historical_name
+			,geohistorical_object.clean_text(full_name)   AS normalised_name
+			,ST_Transform(ST_SetSRID(geom, 932007) , 2154) AS geom
+			,NULL AS specific_fuzzy_date
+			,NULL AS specific_spatial_precision 
+			, 'jacoubet_paris' AS historical_source
+			, 'jacoubet_paris_number' AS numerical_origin_process
+			, clean_text(full_name)
+			,   id_num_sca, id_parc, quartier
+		FROM  
+			(SELECT CASE WHEN num_voies != '0' AND num_voies IS NOT NULL THEN num_voies ||' '||nom_entier ELSE nom_entier END AS full_name
+				, nom_entier
+				, id_num_sca, id_parc, quartier
+				, geom
+			FROM jacoubet_src_number)
+			AS cleaned_name 
 		
