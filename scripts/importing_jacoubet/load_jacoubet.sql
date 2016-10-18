@@ -65,6 +65,12 @@
 			, 'details on data : rules of creation, validation process, known limitations, etc. '
 			, sfti_makesfti(2012, 2012, 2016, 2016)  -- date of data creation
 			, '{"default": 1, "road_axis":3, "building":0.5, "number":1.5, "number_semantic":0.9}'::json) --precision
+
+		, ('jacoubet_paris_quartier'
+			, 'quartier of jacoubet, reconstructed from number of Jacoubet, taken from Vasserot, and hand corrected with the Jacoubet background by Maurizio, '
+			, 'Each number had a quartier information. We corrected this information to eliminate error of typing most likely, and created a quartier geometry usign a buffer(buffer(geom,300),-290), ie conceptually an alpha shape'
+			, sfti_makesfti('17/10/2016'::date, '17/10/2016'::date, '18/10/2016'::date, '18/10/2016'::date)  -- date of data creation
+			, '{"default": 1, "quartier":300}'::json) --precision
 	*/	 
 
 
@@ -76,6 +82,10 @@
 	DROP TABLE IF EXISTS jacoubet_axis ; 
 	CREATE TABLE jacoubet_axis(
 		gid serial primary key
+	) INHERITS (rough_localisation) ; 
+
+	DROP TABLE IF EXISTS jacoubet_quartier ; 
+	CREATE TABLE jacoubet_quartier( 
 	) INHERITS (rough_localisation) ; 
 
 	DROP TABLE IF EXISTS jacoubet_number ; 
@@ -92,6 +102,7 @@
 
 -- register this new tables
 	 SELECT enable_disable_geohistorical_object(  'jacoubet_paris', 'jacoubet_axis'::regclass, true)
+		, enable_disable_geohistorical_object(  'jacoubet_paris', 'jacoubet_quartier'::regclass, true)
 		, enable_disable_geohistorical_object(  'jacoubet_paris', 'jacoubet_number'::regclass, true)
 		, enable_disable_geohistorical_object(  'jacoubet_paris', 'jacoubet_alias'::regclass, true) ;
 
@@ -102,6 +113,12 @@
 	CREATE INDEX ON jacoubet_axis USING GIST(CAST (specific_fuzzy_date AS geometry)) ;
 	CREATE INDEX ON jacoubet_axis (historical_source) ;
 	CREATE INDEX ON jacoubet_axis (numerical_origin_process) ;
+
+	CREATE INDEX ON jacoubet_quartier USING GIN (normalised_name gin_trgm_ops) ;  
+	CREATE INDEX ON jacoubet_quartier USING GIST(geom) ;
+	CREATE INDEX ON jacoubet_quartier USING GIST(CAST (specific_fuzzy_date AS geometry)) ;
+	CREATE INDEX ON jacoubet_quartier (historical_source) ;
+	CREATE INDEX ON jacoubet_quartier (numerical_origin_process) ;
 
 	
 	CREATE INDEX ON jacoubet_number USING GIN (normalised_name gin_trgm_ops) ;  
@@ -252,10 +269,13 @@
 	FROM jacoubet_src_number_quartier_error 
 	ORDER BY cleaned_quartier; 
 
+	SELECT distinct ST_geometryType(geom)
+	FROM jacoubet_axis
+ 
 	--inserting quartier in rough_localisation
 		--SELECT max(gid) FROM jacoubet_axis ; 
 		--ALTER SEQUENCE jacoubet_paris.jacoubet_axis_gid_seq INCREMENT BY 4266 ; 
-	INSERT INTO jacoubet_axis (historical_name, normalised_name, geom, specific_fuzzy_date, specific_spatial_precision, historical_source, numerical_origin_process)
+	INSERT INTO jacoubet_quartier(historical_name, normalised_name, geom, specific_fuzzy_date, specific_spatial_precision, historical_source, numerical_origin_process)
 		SELECT
 			cleaned_quartier AS historical_name
 			,geohistorical_object.clean_text(cleaned_quartier)   AS normalised_name
@@ -263,7 +283,7 @@
 			,NULL AS specific_fuzzy_date
 			,NULL AS specific_spatial_precision 
 			, 'jacoubet_paris' AS historical_source
-			, 'jacoubet_paris_number' AS numerical_origin_process  
+			, 'jacoubet_paris_quartier' AS numerical_origin_process  
 	FROM jacoubet_src_number_quartier_error ; 
 		
 
@@ -275,7 +295,7 @@
 
 	SELECT *
 	FROM jacoubet_src_number
-	LIMIT 1 
+	LIMIT 1  ; 
 
 	DROP TABLE IF EXISTS jacoubet_src_number_ambiguity ;
 		CREATE TABLE jacoubet_src_number_ambiguity AS 
