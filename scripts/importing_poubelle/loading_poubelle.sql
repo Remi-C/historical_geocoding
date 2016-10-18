@@ -195,10 +195,11 @@ en 21 feuilles dressé à l’échelle de 1/5000 résume les travaux des géomè
 	FROM poubelle_src
 	LIMIT 100 ; 
 	
-	DROP TABLE IF EXISTS poubelle_axis ; 
+	DROP TABLE IF EXISTS poubelle_axis CASCADE; 
 	CREATE TABLE poubelle_axis(
-		id serial primary key
-	) INHERITS (rough_localisation) ; 
+		gid serial primary key REFERENCES poubelle_src(gid)
+	) INHERITS (rough_localisation) ;  
+  
 
 	DROP TABLE IF EXISTS poubelle_number ; 
 	CREATE TABLE poubelle_number(
@@ -212,7 +213,7 @@ en 21 feuilles dressé à l’échelle de 1/5000 résume les travaux des géomè
 
  
 	-- register this new tables
-		 SELECT enable_disable_geohistorical_object(  'poubelle_paris', 'poubelle_axis'::regclass, true)
+		 SELECT enable_disable_geohistorical_object(  'poubelle_paris', 'poubelle_axis'::regclass, true)	 
 			, enable_disable_geohistorical_object(  'poubelle_paris', 'poubelle_number'::regclass, true)
 			, enable_disable_geohistorical_object(  'poubelle_paris', 'poubelle_alias'::regclass, true) ;
 
@@ -222,7 +223,7 @@ en 21 feuilles dressé à l’échelle de 1/5000 résume les travaux des géomè
 		CREATE INDEX ON poubelle_axis USING GIST(geom) ;
 		CREATE INDEX ON poubelle_axis USING GIST(CAST (specific_fuzzy_date AS geometry)) ;
 		CREATE INDEX ON poubelle_axis (historical_source) ;
-		CREATE INDEX ON poubelle_axis (numerical_origin_process) ;
+		CREATE INDEX ON poubelle_axis (numerical_origin_process) ; 
 
 		
 		CREATE INDEX ON poubelle_number USING GIN (normalised_name gin_trgm_ops) ;  
@@ -240,7 +241,6 @@ en 21 feuilles dressé à l’échelle de 1/5000 résume les travaux des géomè
 -- inserting road axis: 
 	-- we need to correct the nom_1888 before inserting it, using the poubelle_type_voie_mapping for that
 	--first inserting 
-	
 	SELECT *
 	FROM poubelle_src
 	LIMIT 10 ; 
@@ -256,11 +256,14 @@ en 21 feuilles dressé à l’échelle de 1/5000 résume les travaux des géomè
 			,NULL AS specific_spatial_precision 
 			, 'poubelle_municipal_paris' AS historical_source
 			, 'poubelle_paris_axis' AS numerical_origin_process
+			, gid
 	FROM poubelle_src   ; 
+
+ 
 
 	-- correcting the shortening :  
 	WITH corrected_value_value AS (
-		SELECT id,  normalised_name, prefix,  type_voie_full, postfix 
+		SELECT gid,  normalised_name, prefix,  type_voie_full, postfix 
 		FROM poubelle_axis
 			, substring(normalised_name, '^\w+(\s.*?)$') as postfix  
 			,  substring(normalised_name, '^(\w+)\s.*?$') as prefix 
@@ -268,7 +271,7 @@ en 21 feuilles dressé à l’échelle de 1/5000 résume les travaux des géomè
 	)
 	UPDATE poubelle_axis AS pa SET normalised_name =  cv.type_voie_full || postfix 
 	FROM corrected_value_value AS cv
-	WHERE pa.id = cv.id ; 
+	WHERE pa.gid = cv.gid ; 
 
 	SELECT *
 	FROM poubelle_axis
@@ -281,28 +284,199 @@ en 21 feuilles dressé à l’échelle de 1/5000 résume les travaux des géomè
 	-- to this end, we need to find the direction of the road. In paris, the direction of a road is given regarding the Seine. 
 	-- if the road is approximatively parallel to the Seine, the numbering is from uphill to downhill
 	-- if the road is appromiatevily orthogonal to the Seine, the numbering is from toward the Seine to away from the Seine.
+	-- we also need an approximate road width to place the numbers
 
+	--getting approximate road width:
+		--load data 
+		CREATE SCHEMA IF NOT EXISTS bdtopo_x_streetgen_x_odparis ; 
+		--	/usr/lib/postgresql/9.5/bin/shp2pgsql -d -I /media/sf_RemiCura/DATA/Donnees_belleepoque/street_gen/streetgen_recalle_tout_paris.shp bdtopo_x_streetgen_x_odparis.bdtopo_reregistered  > /tmp/tmp_poublelle.sql ;
+		--  psql -d geocodage_historique -f /tmp/tmp_poublelle.sql ;
 
-	DROP TABLE IF EXISTS seine_axis ; 
-	CREATE TABLE IF NOT EXISTS seine_axis(
-		gid serial primary key
-		,geom geometry(linestring,2154)
-	) ; 
-	INSERT INTO seine_axis(geom) SELECT ST_GeomFromtext('LINESTRING(654809 6859373,653512 6860706,653027 6861191,652520 6861471,652470 6861790,652315 6861953,651636 6862209,651063 6862331,649912 6862872,648489 6862766,647860 6862187,647034 6861420)',2154); 
-
-
-	SELECT *
-	FROM poubelle_src
-	WHERE nom_1888 ILIKE '%bonaparte%'
-	 
-
-	WITH input_road_axis AS (
 		SELECT *
-		FROM poubelle_axis
-		WHERE historical_name  ILIKE '%bonaparte%'
+		FROM bdtopo_x_streetgen_x_odparis.bdtopo_reregistered 
+		LIMIT 10; 
+
+		INSERT into public.spatial_ref_sys (srid,auth_name, auth_srid, srtext,proj4text) values (932011,'Remi_C',310024140,'PROJCS["Lambert 93__offseted_Paris",GEOGCS["Réseau géodésique français 1993",DATUM["Réseau géodésique français 1993",SPHEROID["IAG GRS 1980",6378137.0000,298.2572221010000,AUTHORITY["IGNF","ELG037"]],TOWGS84[0.0000,0.0000,0.0000,0,0,0,0],AUTHORITY["IGNF","REG024"]],PRIMEM["Greenwich",0.000000000,AUTHORITY["IGNF","LGO01"]],UNIT["degree",0.01745329251994330],AXIS["Longitude",EAST],AXIS["Latitude",NORTH],AUTHORITY["IGNF","RGF93G"]],PROJECTION["Lambert_Conformal_Conic_2SP",AUTHORITY["IGNF","PRC0140"]],PARAMETER["semi_major",6378137.0000],PARAMETER["semi_minor",6356752.3141],PARAMETER["latitude_of_origin",46.500000000],PARAMETER["central_meridian",3.000000000],PARAMETER["standard_parallel_1",44.000000000],PARAMETER["standard_parallel_2",49.000000000],PARAMETER["false_easting",700000.000],PARAMETER["false_northing",6600000.000],UNIT["metre",1],AXIS["Easting",EAST],AXIS["Northing",NORTH],AUTHORITY["IGNF","LAMB93"]]','+init=IGNF:LAMB93 +x_0=51000 +y_0=-240000');
+
+
+		DROP TABLE IF EXISTS bdtopo_x_streetgen_x_odparis.bdtopo_reregistered_cleaned ;
+		CREATE TABLE  bdtopo_x_streetgen_x_odparis.bdtopo_reregistered_cleaned(
+			gid serial primary key
+			,road_width float
+			, geom geometry(Multilinestring,2154)
+		); 
+		CREATE INDEX ON bdtopo_x_streetgen_x_odparis.bdtopo_reregistered_cleaned USING GIST(geom) ; 
+
+		INSERT INTO bdtopo_x_streetgen_x_odparis.bdtopo_reregistered_cleaned
+			SELECT gid, field_3,ST_Transform( ST_SetSRID(ST_Force2D(geom),932011),2154)
+			FROM bdtopo_x_streetgen_x_odparis.bdtopo_reregistered ;
+
+		--transferring road width 
+			-- TRUNCATE poubelle_axis_approx_width ; 
+			DROP TABLE IF EXISTS poubelle_axis_approx_width;
+			CREATE TABLE poubelle_axis_approx_width(
+			gid serial REFERENCES poubelle_axis(gid)
+			, geom geometry(multilinestring,2154)
+			, approx_road_width float
+			) ; 
+
+			INSERT INTO poubelle_axis_approx_width
+			SELECT gid, max( geom) as geom, sum(road_width * shared_surf_perc) / sum(shared_surf_perc) AS wwidth
+				FROM  
+				(
+				SELECT DISTINCT ON (pa.gid, bdtopo.gid) pa.gid, pa.geom, bdtopo.road_width,  shared_surf_perc
+				FROM poubelle_axis AS pa
+					, ST_Buffer(pa.geom,10) as pageom
+					, bdtopo_x_streetgen_x_odparis.bdtopo_reregistered_cleaned  as bdtopo
+					, ST_Buffer(bdtopo.geom,10) AS bdgeom  
+					, CAST(ST_Area(ST_Intersection(pageom,bdgeom )) / ST_Area(ST_Union(pageom,bdgeom)) AS float) as shared_surf_perc
+				WHERE ST_DWithin(pa.geom, bdtopo.geom,10) = TRUE
+				ORDER BY pa.gid, bdtopo.gid, shared_surf_perc DESC 
+				) AS unique_poubelle_bdtopo  
+			GROUP BY  gid ; 
+			-- approx road width is now in poubelle_axis_approx_width
+	-- now dealing with missing numbers
+		--on all poubelle road axis segment, how much have correct numbering information?
+		WITH all_numbers AS (
+		SELECT adr_dg88 beg , adr_fg88 en, geom, id, nom_1888, 'left' side
+		FROM poubelle_src
+		UNION ALL 
+		SELECT adr_dd88, adr_fd88, geom, id, nom_1888, 'right' side
+		FROM poubelle_src
+		)
+		SELECT count(*) --7127/13732 road axis segment side have complete information for number generation
+		FROM all_numbers 
+		WHERE outils_geocodage.numerotation2float(beg) != 0 AND outils_geocodage.numerotation2float( en) != 0 
+			AND outils_geocodage.numerotation2float(beg) != -1 AND outils_geocodage.numerotation2float(en) != 61
+			AND beg IS NOT NULL AND en IS NOT NULL; 
+
+
+		--generating all the points when possible :  
+
+
 		
-		LIMIT 100
-	)
+		DROP FUNCTION IF EXISTS poubelle_paris.generate_numbers_points(   road_axis geometry, approx_road_width float, is_left_side boolean, start_number float, end_number float, sidewalk_width float, offset_position float ); 
+		CREATE OR REPLACE FUNCTION poubelle_paris.generate_numbers_points(  road_axis geometry, approx_road_width float, is_left_side boolean, start_number float, end_number float, sidewalk_width float, offset_position float )
+		RETURNS TABLE(nid int, numbers_value float, number_geom geometry) AS 
+			$BODY$
+				--@brief : this function generate the numbers for a given segement of road, given the relevant information, using linear interpolation 
+				DECLARE      
+				BEGIN 
+					RAISE NOTICE 'road_axis : %', ST_AsText(road_axis); 
+					RETURN QUERY 
+					WITH i_data AS (
+						SELECT  road_axis,  approx_road_width,  is_left_side
+							,  start_number
+							,   end_number
+							,   sidewalk_width  
+							, offset_position
+					)
+					, n_number_to_create AS (
+						SELECT  CAST( ( i.end_number-i.start_number)/2 AS int)   as n_num
+						FROM i_data as i
+					)
+					, preparing_substring AS (
+						SELECT CASE WHEN i.is_left_side IS TRUE THEN sub 
+							ELSE ST_Reverse(sub) END AS sub
+						FROM i_data AS i
+							, least(0.4,i.offset_position/ST_Length(St_GeometryN(i.road_axis,1))) AS offset_curv
+							,  ST_LineSubstring (St_GeometryN(i.road_axis,1),offset_curv, 1-offset_curv ) as sub
+					
+					)
+					--,curv_abs AS (
+						SELECT (row_number() over(order by s ))::int as id, s::float
+							,CASE WHEN i.is_left_side IS TRUE THEN ST_LineInterpolatePoint(ngeom, ncurv) ELSE ST_LineInterpolatePoint(ST_Reverse(ngeom), ncurv)  END as interpolated_point
+							--,  ncurv
+						FROM i_data AS i, n_number_to_create, preparing_substring
+							, generate_series( i.start_number::int, i.start_number::int + 2*  n_num::int,  (( i.end_number-i.start_number)/abs( ( i.end_number-i.start_number)) *  2)::int) AS s
+							, CAST ((s-i.start_number)/(i.end_number-i.start_number) AS float) AS ncurv
+							, ST_OffsetCurve(sub 
+								, (i.approx_road_width + i.sidewalk_width))  AS ngeom ; 
+									
+				RETURN ; 
+				END ; 
+			$BODY$
+		LANGUAGE plpgsql  IMMUTABLE STRICT; 
+
+		DROP TABLE IF EXISTS test_generating_number ; 
+		CREATE TABLE test_generating_number AS 
+		WITH i_data AS (
+			SELECT pb.id, pb.geom as road_axis
+				, COALESCE(approx.approx_road_width, 9.5::float) as approx_road_width
+				, true AS is_left_side
+				, outils_geocodage.numerotation2float(adr_dg88) AS start_number
+				, outils_geocodage.numerotation2float(adr_fg88) AS end_number
+				, 2 AS  sidewalk_width 
+				, 10.0 AS  offset_position
+			FROM poubelle_src  AS pb LEFT OUTER JOIN poubelle_axis_approx_width as approx ON  (approx.id = pb.id::int) 
+			WHERE  -- gid = 1436 -- street oriented upward, numbering downward
+					--OR  gid = 922 -- street oriented downward, numbering downward
+					-- gid = 1835  --street oriented upward, numbering upward
+					 gid = 5754 --error case
+		)
+		SELECT f.*
+		FROM i_data 
+			, poubelle_paris.generate_numbers_points(road_axis  , approx_road_width , is_left_side , start_number  , end_number, sidewalk_width,offset_position )  as  f ; 
+
+		DROP TABLE IF EXISTS test_generating_number ; 
+		 CREATE TABLE test_generating_number AS  
+			WITH all_sides AS (
+				SELECT pa.gid,  pa.geom road_axis, approx_road_width , adr_dg88 start_number , adr_fg88 end_number,true AS is_left_side, nom_1888
+				FROM poubelle_axis AS pa
+					LEFT OUTER JOIN poubelle_src AS pb USING (gid )
+					LEFT OUTER JOIN poubelle_axis_approx_width AS pw USING(gid)
+				UNION ALL 
+				SELECT  pa.gid, pa.geom road_axis, approx_road_width , adr_dd88 start_number , adr_fd88 end_number, false AS is_left_side, nom_1888
+				FROM poubelle_axis AS pa
+					LEFT OUTER JOIN poubelle_src AS pb USING (gid )
+					LEFT OUTER JOIN poubelle_axis_approx_width AS pw USING(gid)
+			)
+			SELECT al.gid, nom_1888, f.*
+			FROM  all_sides AS al
+				, outils_geocodage.numerotation2float(start_number  ) AS sn
+				, outils_geocodage.numerotation2float(end_number) AS en
+				, poubelle_paris.generate_numbers_points(
+					road_axis  
+					, approx_road_width 
+					, is_left_side 
+					,sn
+					,en
+					, 2.0::float --  sidewalk_width
+					,10.0::float ) AS f-- offset_position )  as  f  
+			WHERE sn !=0 AND en != 0
+				AND sn  != -1 AND en::int != -1
+				AND sn IS NOT NULL  AND en IS NOT NULL 
+				AND abs(sn::int-en::int)>3;
+				
+		 
+		SELECT *
+		FROM poubelle_axis AS pa
+			LEFT OUTER JOIN poubelle_src AS pb USING (gid )
+		WHERE pb.id S
+
+		  
+		-- writting a function to estimate the direction of a road regarding the seine.
+		-- each point of the road has to be passed into relative coordinates regarding the Seine
+			DROP TABLE IF EXISTS seine_axis ; 
+			CREATE TABLE IF NOT EXISTS seine_axis(
+				gid serial primary key
+				,geom geometry(linestring,2154)
+			) ; 
+			INSERT INTO seine_axis(geom) SELECT ST_GeomFromtext('LINESTRING(654809 6859373,653512 6860706,653027 6861191,652520 6861471,652470 6861790,652315 6861953,651636 6862209,651063 6862331,649912 6862872,648489 6862766,647860 6862187,647034 6861420)',2154); 
+
+
+			SELECT *
+			FROM poubelle_src
+			WHERE nom_1888 ILIKE '%bonaparte%' ;  
+			 
+
+			WITH input_road_axis AS (
+				SELECT *
+				FROM poubelle_axis
+				WHERE historical_name  ILIKE '%bonaparte%'
+				
+				LIMIT 100
+			)
 
 	
 	-- for how much road can we predict the direction of numbering
