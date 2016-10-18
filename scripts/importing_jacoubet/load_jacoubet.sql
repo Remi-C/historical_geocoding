@@ -111,8 +111,7 @@
 	CREATE INDEX ON jacoubet_number (numerical_origin_process) ; 
 	CREATE INDEX ON jacoubet_number USING GIN (associated_normalised_rough_name gin_trgm_ops) ; 
 
-	CREATE INDEX ON jacoubet_number (quartier) ;
-	quartier
+	CREATE INDEX ON jacoubet_number (quartier) ; 
 
 	CREATE INDEX ON jacoubet_alias USING GIN (short_historical_source_name_1 gin_trgm_ops) ;
 	CREATE INDEX ON jacoubet_alias USING GIN (short_historical_source_name_2 gin_trgm_ops) ; 
@@ -178,33 +177,7 @@
 		--inserting into geocoding table :
 		CREATE EXTENSION IF NOT EXISTS unaccent;
 		--	TRUNCATE jacoubet_axis
-
-				
-		DROP FUNCTION IF EXISTS geohistorical_object.clean_text(   it text ); 
-		CREATE OR REPLACE FUNCTION geohistorical_object.clean_text(  it text )
-		RETURNS text AS 
-			$BODY$
-				--@brief : this function takes a string and return it cleaned 
-				DECLARE      
-				BEGIN 
-					RETURN 
-					regexp_replace( 
-						regexp_replace( 
-							regexp_replace(
-								regexp_replace(  
-									lower( --all to small font
-										unaccent(it) --removing accent
-									)
-								, '[^a-zA-Z0-9]+', ' ', 'g') --removing characters that are not letters or digits
-							, '[_]+', ' ', 'g') --removing underscore
-						, '\s+$', '') --removing things lliek space at  the end
-					 ,'^\s+', '') --removing things like space at the beginning
-					 ;
-				END ; 
-			$BODY$
-		LANGUAGE plpgsql  IMMUTABLE STRICT; 
-
-		SELECT geohistorical_object.clean_text(  $$  5zer'ezer_ze ze'r $*ùzer ;   $$);
+ 
 		
 		INSERT INTO jacoubet_axis
 		SELECT nom_entier AS historical_name
