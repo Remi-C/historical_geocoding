@@ -7,6 +7,10 @@
 -- we design a template database schema  that will be used through the inheritance mechanism 
 -- so users can add other historical sources
 
+SET search_path to public ; 
+-- DROP EXTENSION IF EXISTS unaccent ;
+CREATE EXTENSION IF NOT EXISTS unaccent;
+
 CREATE SCHEMA IF NOT EXISTS geohistorical_object ; 
 SET search_path to geohistorical_object, public; 
 
@@ -75,11 +79,11 @@ RETURNS text AS
 			-- check if input table is in the list of tables that inherits from 'geohistorical_object' and/or from 'normalised_name_alias' 
 				SELECT children_table INTO _isobj
 				FROM  find_all_children_in_inheritance('geohistorical_object.geohistorical_object')
-				WHERE children_table = table_name
+				WHERE children_table = table_name::regclass::text
 				LIMIT 1 ;
 				SELECT children_table INTO _isalias
 				FROM  find_all_children_in_inheritance('geohistorical_object.normalised_name_alias')
-				WHERE children_table = table_name
+				WHERE children_table = table_name::regclass::text
 				LIMIT 1 ;
 
 				_isobjb := _isobj IS NOT NULL; 
@@ -186,19 +190,19 @@ LANGUAGE plpgsql  VOLATILE STRICT;
  
 DROP FUNCTION IF EXISTS geohistorical_object.find_all_children_in_inheritance(   IN parent_table_full_name regclass); 
 CREATE OR REPLACE FUNCTION geohistorical_object.find_all_children_in_inheritance(   IN parent_table_full_name regclass)
-RETURNS table(children_table regclass) AS 
+RETURNS table(children_table text) AS 
 	$BODY$
 		--@brief : given a parent table, look for all the tables that inherit from it (several level of inheritance allowed)
 		DECLARE      
 		BEGIN 
 		 RETURN QUERY 
-			SELECT children FROM (
+			SELECT children::text FROM (
 				   WITH RECURSIVE inh AS (
 					SELECT i.inhrelid FROM pg_catalog.pg_inherits i WHERE inhparent = parent_table_full_name::regclass
 					UNION
 					SELECT i.inhrelid FROM inh INNER JOIN pg_catalog.pg_inherits i ON (inh.inhrelid = i.inhparent)
 				)
-				SELECT pg_namespace.nspname AS father , pg_class.relname::regclass AS children
+				SELECT pg_namespace.nspname AS father , pg_class.relname  AS children
 				    FROM inh 
 				      INNER JOIN pg_catalog.pg_class ON (inh.inhrelid = pg_class.oid) 
 				      INNER JOIN pg_catalog.pg_namespace ON (pg_class.relnamespace = pg_namespace.oid)
@@ -243,4 +247,32 @@ LANGUAGE plpgsql  IMMUTABLE STRICT;
 
 SELECT *
 FROM geohistorical_object.find_foreign_key_between_source_and_target(  'geohistorical_object', 'test_geohistorical_object', 'historical_source','geohistorical_object', 'historical_source', 'short_name' ) ; 
+
+
+
+	DROP FUNCTION IF EXISTS geohistorical_object.clean_text(   it text ); 
+		CREATE OR REPLACE FUNCTION geohistorical_object.clean_text(  it text )
+		RETURNS text AS 
+			$BODY$
+				--@brief : this function takes a string and return it cleaned 
+				DECLARE      
+				BEGIN 
+					RETURN 
+					regexp_replace( 
+						regexp_replace( 
+							regexp_replace(
+								regexp_replace(  
+									lower( --all to small font
+										unaccent(it) --removing accent
+									)
+								, '[^a-zA-Z0-9]+', ' ', 'g') --removing characters that are not letters or digits
+							, '[_]+', ' ', 'g') --removing underscore
+						, '\s+$', '') --removing things lliek space at  the end
+					 ,'^\s+', '') --removing things like space at the beginning
+					 ;
+				END ; 
+			$BODY$
+		LANGUAGE plpgsql  IMMUTABLE STRICT; 
+
+		SELECT geohistorical_object.clean_text(  $$  5zer'ezer_ze ze'r $*ùzer ;   $$);
  
