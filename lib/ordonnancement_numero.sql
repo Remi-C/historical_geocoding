@@ -122,6 +122,38 @@
 	SELECT outils_geocodage.numerotation2float('48 ante')  ;
 
 
+
+	DROP FUNCTION IF EXISTS outils_geocodage.float2numerotation(inumf float, OUT numerotation text) ;
+	CREATE OR REPLACE FUNCTION outils_geocodage.float2numerotation(inumf float, OUT numerotation text)  AS 
+	$$
+		-- le format en entré est un float, la sortie du texte par exe : 12.02 -> 12Bis
+	DECLARE 
+	BEGIN   
+		BEGIN
+			SELECT DISTINCT ON (ordonnancement) floor(inumf)::int::text || suffixe INTO numerotation
+			FROM outils_geocodage.ordonnancement_suffixe AS os
+			WHERE os.ordonnancement = round((inumf- floor(inumf))::numeric,3)
+			ORDER BY ordonnancement, char_length( suffixe) DESC ; 
+		EXCEPTION 
+			WHEN others THEN
+			numerotation :=  inumf::int::text ; 
+			RETURN ; 
+		END;
+		IF numerotation IS NULL THEN
+		numerotation :=  inumf::int::text ; 
+		END IF ;
+
+		RETURN ; 
+
+	END;
+	$$
+	LANGUAGE 'plpgsql' IMMUTABLE STRICT ;  
+
+	--test
+	SELECT outils_geocodage.float2numerotation('48.58')  ;
+ 
+
+
 	DROP FUNCTION IF EXISTS outils_geocodage.estContigueA(numerotation1 text, numerotation2 text, OUT estContigueA boolean) ;
 	CREATE OR REPLACE FUNCTION outils_geocodage.estContigueA(numerotation1 text, numerotation2 text, OUT estContigueA boolean)   AS 
 	$$
