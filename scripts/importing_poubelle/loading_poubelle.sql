@@ -23,15 +23,43 @@
     SET search_path to poubelle_paris, historical_geocoding, geohistorical_object, public; 
 
   --charger les données dans la base avec shp2pgsql
-    -- /usr/lib/postgresql/9.5/bin/shp2pgsql -d -I /media/sf_RemiCura/DATA/Donnees_belleepoque/reseau_routier_benoit_20160701/poubelle_TEMPORAIRE.shp poubelle_paris.poubelle_src  > /tmp/tmp_poublelle.sql ;
+    -- /usr/lib/postgresql/9.5/bin/shp2pgsql -d -I /media/sf_RemiCura/DATA/Donnees_belleepoque/reseau_routier_benoit_20160701/poubelle_TEMPORAIRE_emprise_utf8_L93_v2.shp poubelle_paris.poubelle_src  > /tmp/tmp_poublelle.sql ;
     --  psql -d geocodage_historique -f /tmp/tmp_poublelle.sql ;
-  -- la table poubelle_src est maintenant remplie
-    --verification dans QGIS
-    -- les données ne contiennent pas d'accent et sont déjà en majuscule...
 
-	   SELECT *
-	   FROM poubelle_src
-	   LIMIT 1 ;
+     -- /usr/lib/postgresql/9.5/bin/shp2pgsql -d -I /media/sf_RemiCura/DATA/Donnees_belleepoque/reseau_routier_benoit_20160701/poubelle_TEMPORAIRE.shp poubelle_paris.poubelle_src_2  > /tmp/tmp_poubelle2.sql ;
+    --  psql -d geocodage_historique -f /tmp/tmp_poubelle2.sql ;
+	ALTER TABLE poubelle_paris.poubelle_src_2 ALTER COLUMN geom TYPE geometry(multilinestring,2154) USING ST_SetSRID(geom,2154)  ;
+    
+  -- la table poubelle_src est maintenant remplie
+  -- la table poubelle_src_2 aussi : elle contient plus de données, mais moins précise. 
+  -- we fuse poubelle_src and poubelle_sr_2, by taking in priority poubelle_src and completing it with poubelle_src_2 
+		DROP TABLE IF EXISTS poubelle_src_merged; 
+		CREATE TABLE IF NOT EXISTS  poubelle_src_merged ( LIKE poubelle_src INCLUDING DEFAULTS INCLUDING CONSTRAINTS INCLUDING INDEXES ); 
+
+		INSERT INTO poubelle_src_merged SELECT * FROM poubelle_src ; 
+
+		SELECT * FROM poubelle_src_2 LIMIT 1 ; 
+ 
+
+		--now , creating the spatial limit of poubelle_src, adding row of poubelle_src_2 that are not withint his limit. 
+		DROP TABLE IF EXISTS temp_test_visu ;
+		CREATE TABLE IF NOT EXISTS temp_test_visu AS
+		
+		WITH fermiers_generaux AS (
+		
+			SELECT ST_MakePolygon(ST_ExteriorRing(ST_GeometryN(ST_Union(ST_Buffer(geom,5,'quad_segs=2')),1)) )as src_bounding
+			FROM poubelle_src
+			LIMIT 1 
+		) 
+		INSERT INTO poubelle_src_merged (nom_1888, type_voie, particule, nom_voie, adr_fg88, adr_fd88, adr_dg88, adr_dd88, id, geom ) 
+		SELECT nom_1888, type_voie, particule, nom_voie, adr_fg88, adr_fd88, adr_dg88, adr_dd88, id, geom 
+		FROM fermiers_generaux AS fg, poubelle_src_2 AS p2
+			, ST_Buffer(p2.geom,5) as ngeom
+			, CAST( St_Area(ST_Intersection(fg.src_bounding,ngeom)) / ST_Area(ngeom)AS float)  as shared_surf
+		WHERE shared_surf < 0.9  ; 
+
+		
+ 
     --creation d'une vue pour voir les endroits problématiques
       --vue sur les rue homonymes 
         DROP VIEW IF EXISTS poubelle_compte_homonyme  ; 
@@ -112,8 +140,16 @@ en 21 feuilles dressé à l’échelle de 1/5000 résume les travaux des géomè
 
 	/*
 		INSERT INTO geohistorical_object.numerical_origin_process VALUES
+		('poubelle_paris_axis_audela_fermiers_generaux'
+			, 'The axis were manually created by people from geohistorical data project, but not ufrther corrected/validated by Benoit Combes'
+			, 'details on data : rules of creation, validation process, known limitations, etc. 
+			the file used was provided by Benoit and named "poubelle_TEMPORAIRE.shp"
+				Initially, the axis name used abbreviation : "PL" for "place", etc. The abbrebeviation were expanded to initial meaning by Rémi Cura '
+			, sfti_makesfti(2007, 2007, 2016, 2016)  -- date of data creation
+			, '{"default": 3, "road_axis":5, "number":4}'::json) --precision
+		,
 		('poubelle_paris_axis'
-			, 'The axis were manually created by people from geohistorical data project, and ufrther corrected/validated by Benoit Combes'
+			, 'The axis were manually created by people from geohistorical data project, and ufrther corrected/validated by Benoit Combes for the inner part of Fermier Generaux, and not corrected for outside'
 			, 'details on data : rules of creation, validation process, known limitations, etc. 
 				Initially, the axis name used abbreviation : "PL" for "place", etc. The abbrebeviation were expanded to initial meaning by Rémi Cura '
 			, sfti_makesfti(2007, 2007, 2016, 2016)  -- date of data creation
@@ -194,18 +230,21 @@ en 21 feuilles dressé à l’échelle de 1/5000 résume les travaux des géomè
 	SELECT *
 	FROM poubelle_src
 	LIMIT 100 ; 
+
 	
 	DROP TABLE IF EXISTS poubelle_axis CASCADE; 
 	CREATE TABLE poubelle_axis(
 		gid serial primary key REFERENCES poubelle_src(gid)
 	) INHERITS (rough_localisation) ;  
-  
+	TRUNCATE poubelle_axis CASCADE ; 
 
 	DROP TABLE IF EXISTS poubelle_number ; 
 	CREATE TABLE poubelle_number(
 		gid serial primary key , 
 		road_axis_id int REFERENCES poubelle_axis(id)
 	) INHERITS (precise_localisation) ; 
+	TRUNCATE poubelle_number CASCADE ; 
+	
 
 	DROP TABLE IF EXISTS poubelle_alias ;
 	CREATE TABLE poubelle_alias (
@@ -257,7 +296,7 @@ en 21 feuilles dressé à l’échelle de 1/5000 résume les travaux des géomè
 			, 'poubelle_municipal_paris' AS historical_source
 			, 'poubelle_paris_axis' AS numerical_origin_process
 			, gid
-	FROM poubelle_src   ; 
+	FROM poubelle_src_merged   ; 
 
  
 
@@ -362,7 +401,8 @@ en 21 feuilles dressé à l’échelle de 1/5000 résume les travaux des géomè
 				--@brief : this function generate the numbers for a given segement of road, given the relevant information, using linear interpolation 
 				DECLARE      
 				BEGIN 
-					RAISE NOTICE 'road_axis : %', ST_AsText(road_axis); 
+					--RAISE NOTICE 'road_axis : %', ST_AsText(road_axis); 
+					BEGIN 
 					RETURN QUERY 
 					WITH i_data AS (
 						SELECT  road_axis,  approx_road_width,  is_left_side
@@ -392,7 +432,12 @@ en 21 feuilles dressé à l’échelle de 1/5000 résume les travaux des géomè
 							, CAST ((s-i.start_number)/(i.end_number-i.start_number) AS float) AS ncurv
 							, ST_OffsetCurve(sub 
 								, (i.approx_road_width + i.sidewalk_width))  AS ngeom ; 
-									
+				    
+				EXCEPTION	
+					WHEN others THEN
+					RAISE NOTICE 'failed to work on geom %', ST_AsText(road_axis);
+					RETURN QUERY SELECT NULL::int, NULL::float, NULL::geometry; 
+				END ;
 				RETURN ; 
 				END ; 
 			$BODY$
@@ -408,11 +453,11 @@ en 21 feuilles dressé à l’échelle de 1/5000 résume les travaux des géomè
 				, outils_geocodage.numerotation2float(adr_fg88) AS end_number
 				, 2 AS  sidewalk_width 
 				, 10.0 AS  offset_position
-			FROM poubelle_src  AS pb LEFT OUTER JOIN poubelle_axis_approx_width as approx ON  (approx.id = pb.id::int) 
+			FROM poubelle_src_merged  AS pb LEFT OUTER JOIN poubelle_axis_approx_width as approx ON  (approx.gid = pb.gid::int) 
 			WHERE  -- gid = 1436 -- street oriented upward, numbering downward
 					--OR  gid = 922 -- street oriented downward, numbering downward
 					-- gid = 1835  --street oriented upward, numbering upward
-					 gid = 5754 --error case
+					 pb.gid = 5754 --error case
 		)
 		SELECT f.*
 		FROM i_data 
@@ -423,12 +468,12 @@ en 21 feuilles dressé à l’échelle de 1/5000 résume les travaux des géomè
 			WITH all_sides AS (
 				SELECT pa.gid,  pa.geom road_axis, approx_road_width , adr_dg88 start_number , adr_fg88 end_number,true AS is_left_side, nom_1888
 				FROM poubelle_axis AS pa
-					LEFT OUTER JOIN poubelle_src AS pb USING (gid )
+					LEFT OUTER JOIN poubelle_src_merged AS pb USING (gid )
 					LEFT OUTER JOIN poubelle_axis_approx_width AS pw USING(gid)
 				UNION ALL 
 				SELECT  pa.gid, pa.geom road_axis, approx_road_width , adr_dd88 start_number , adr_fd88 end_number, false AS is_left_side, nom_1888
 				FROM poubelle_axis AS pa
-					LEFT OUTER JOIN poubelle_src AS pb USING (gid )
+					LEFT OUTER JOIN poubelle_src_merged AS pb USING (gid )
 					LEFT OUTER JOIN poubelle_axis_approx_width AS pw USING(gid)
 			)
 			SELECT al.gid, nom_1888, f.*
@@ -446,14 +491,44 @@ en 21 feuilles dressé à l’échelle de 1/5000 résume les travaux des géomè
 			WHERE sn !=0 AND en != 0
 				AND sn  != -1 AND en::int != -1
 				AND sn IS NOT NULL  AND en IS NOT NULL 
-				AND abs(sn::int-en::int)>3;
+				AND abs(sn::int-en::int)>2;
 				
-		 
-		SELECT *
-		FROM poubelle_axis AS pa
-			LEFT OUTER JOIN poubelle_src AS pb USING (gid )
-		WHERE pb.id S
 
+		SELECT * --count(*)
+		FROM test_generating_number
+		WHERE numbers_value IS NULL ; 
+
+		DROP TABLE IF EXISTS poubelle_visu_fail_numbering ; 
+		CREATE TABLE poubelle_visu_fail_numbering AS
+		SELECT pa.*
+		FROM test_generating_number
+			LEFT OUTER JOIN poubelle_axis AS pa USING (gid) 
+		WHERE nid IS NULL ; 
+
+		DROP TABLE IF EXISTS poubelle_visu_contradictory_parity ; 
+		CREATE TABLE IF NOT EXISTS poubelle_visu_contradictory_parity AS 
+			WITH cleaned_input AS (
+				SELECT gid, nom_1888 
+					,fg88 ,dg88, fd88,  dd88
+					, geom
+				FROM poubelle_src_merged
+					, CAST(outils_geocodage.numerotation2float(adr_fg88) AS int) AS fg88 , CAST(outils_geocodage.numerotation2float(adr_fd88) AS int) AS fd88 
+					,CAST(outils_geocodage.numerotation2float(adr_dg88)AS int) AS dg88 , CAST(outils_geocodage.numerotation2float(adr_dd88) AS int) AS dd88 
+				WHERE ( fg88 != 0 OR dg88!=0) AND ( fd88 != 0 OR dd88!=0) 
+					AND (fg88 != -1 AND dg88!= -1 AND fd88 != -1 AND dd88 != -1) 
+				  
+			)
+			SELECT *
+			FROM cleaned_input 
+			WHERE --number on the same side dont have the same parity
+				( fg88 != 0 AND dg88 != 0 ) AND (fg88 + dg88)&1 =1 -- if same parity, sum should be par
+				OR 
+				( fd88 != 0 AND dd88 != 0 ) AND (fd88 + dd88)&1 =1
+				OR --number on opposite side should have opposite parity
+				(greatest(fg88, dg88) + greatest(fd88, dd88) ) &1 = 0  ; 
+				
+ /*
+-- NOTE : to properly generate numbers, we should 
 		  
 		-- writting a function to estimate the direction of a road regarding the seine.
 		-- each point of the road has to be passed into relative coordinates regarding the Seine
@@ -481,3 +556,4 @@ en 21 feuilles dressé à l’échelle de 1/5000 résume les travaux des géomè
 	
 	-- for how much road can we predict the direction of numbering
 	-- for how much road can we interpolate 
+*/
