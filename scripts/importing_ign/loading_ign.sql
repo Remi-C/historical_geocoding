@@ -182,6 +182,9 @@
 			,'ign_france_town'
 			,gid
 	 FROM ign_commune_src  ;  
+
+	 
+	UPDATE ign_france_town SET specific_spatial_precision = (ST_MinimumBoundingRadius(geom)).radius ;
 	 
 
 -- preparing to fill the axis table

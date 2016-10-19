@@ -286,7 +286,8 @@
 			, 'jacoubet_paris' AS historical_source
 			, 'jacoubet_paris_quartier' AS numerical_origin_process  
 	FROM jacoubet_src_number_quartier_error ; 
-		
+
+	UPDATE jacoubet_quartier SET specific_spatial_precision = (ST_MinimumBoundingRadius(geom)).radius ;  
 
 	-- checking potential errors in nom_entier (road_name)
 	SELECT  ct, count(*)

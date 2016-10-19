@@ -74,6 +74,9 @@ INSERT INTO geohistorical_object.numerical_origin_process VALUES
 		FROM cassini_commune_src as cas ; 
  
 
+	UPDATE cassini_town SET specific_spatial_precision = (ST_MinimumBoundingRadius(geom)).radius ; 
+
+	
 	SELECT  nom, code_insee, cas.start, cas.end, geom  
    FROM cassini_commune_src as cas
    LIMIT 1  ; 
