@@ -111,58 +111,58 @@
 
 
 
--- add relevant entry into geohistorical_object schema : `historical_source` and `numerical_origin_process`
+	-- add relevant entry into geohistorical_object schema : `historical_source` and `numerical_origin_process`
 
-	/*  
- 
-		INSERT INTO  geohistorical_object.historical_source  VALUES
-		('poubelle_municipal_paris'
-			, 'Atlas municipal des vingt arrondissements de la ville de Paris. 
-Dressé sous la direction de M. Alphand inspecteur général des  ponts et chaussées, par les soins de M.L Fauve, géomètre en chef, avec le concours des géomètres du plan de Paris (Alphand et Fauve, 1888) réalisé sous la direction du préfet Eugène Poubelle.'
-			, 'Pour tracer ce plan, Haussmann indique dans ses mémoires (Haussmann, 1893)
-qu’une nouvelle triangulation complète de Paris a été effectuée entre 1856 et 1857,
-sous la direction d’Eugène Deschamps 18. Ainsi, ce plan constituerait la première triangulation
-complète effectuée depuis l’atlas de Verniquet, du moins si l’on conserve
-l’hypothèse d’une triangulation seulement partielle pour Jacoubet. Haussmann, affirmant
-qu’aucun grand plan de Paris n’existait lors de son arrivée à la préfecture
-renouvelle ainsi totalement les outils de l’administration. Il n’est cependant pas certain
-que les choses aient été si simples et la tendance du préfet à se placer en fondateur
-de la cartographie officielle en omettant volontairement des projets antérieurs a
-déjà été pointée par Pierre Casselle (Casselle, 2000) (C’était alors la commission des
-embellissements du Comte Siméon qui était ignorée et son rôle auprès de l’empereur
-minimisé). En effet, le frontispice d’une édition réduite au 1/10.000e conservée à la
-Bibliothèque Nationale de France (Deschamps et al., 1871) indique que le grand plan
-en 21 feuilles dressé à l’échelle de 1/5000 résume les travaux des géomètres du Plan...'
-		, sfti_makesfti(1887, 1888, 1888, 1889)
-		,  '{"default": 4, "road_axis":2.5, "building":1, "number":2}'::json 
-		) ; 
-	*/
+		/*  
+	 
+			INSERT INTO  geohistorical_object.historical_source  VALUES
+			('poubelle_municipal_paris'
+				, 'Atlas municipal des vingt arrondissements de la ville de Paris. 
+	Dressé sous la direction de M. Alphand inspecteur général des  ponts et chaussées, par les soins de M.L Fauve, géomètre en chef, avec le concours des géomètres du plan de Paris (Alphand et Fauve, 1888) réalisé sous la direction du préfet Eugène Poubelle.'
+				, 'Pour tracer ce plan, Haussmann indique dans ses mémoires (Haussmann, 1893)
+	qu’une nouvelle triangulation complète de Paris a été effectuée entre 1856 et 1857,
+	sous la direction d’Eugène Deschamps 18. Ainsi, ce plan constituerait la première triangulation
+	complète effectuée depuis l’atlas de Verniquet, du moins si l’on conserve
+	l’hypothèse d’une triangulation seulement partielle pour Jacoubet. Haussmann, affirmant
+	qu’aucun grand plan de Paris n’existait lors de son arrivée à la préfecture
+	renouvelle ainsi totalement les outils de l’administration. Il n’est cependant pas certain
+	que les choses aient été si simples et la tendance du préfet à se placer en fondateur
+	de la cartographie officielle en omettant volontairement des projets antérieurs a
+	déjà été pointée par Pierre Casselle (Casselle, 2000) (C’était alors la commission des
+	embellissements du Comte Siméon qui était ignorée et son rôle auprès de l’empereur
+	minimisé). En effet, le frontispice d’une édition réduite au 1/10.000e conservée à la
+	Bibliothèque Nationale de France (Deschamps et al., 1871) indique que le grand plan
+	en 21 feuilles dressé à l’échelle de 1/5000 résume les travaux des géomètres du Plan...'
+			, sfti_makesfti(1887, 1888, 1888, 1889)
+			,  '{"default": 4, "road_axis":2.5, "building":1, "number":2}'::json 
+			) ; 
+		*/
 
-	/*
-		INSERT INTO geohistorical_object.numerical_origin_process VALUES
-		('poubelle_paris_axis_audela_fermiers_generaux'
-			, 'The axis were manually created by people from geohistorical data project, but not ufrther corrected/validated by Benoit Combes'
-			, 'details on data : rules of creation, validation process, known limitations, etc. 
-			the file used was provided by Benoit and named "poubelle_TEMPORAIRE.shp"
-				Initially, the axis name used abbreviation : "PL" for "place", etc. The abbrebeviation were expanded to initial meaning by Rémi Cura '
-			, sfti_makesfti(2007, 2007, 2016, 2016)  -- date of data creation
-			, '{"default": 3, "road_axis":5, "number":4}'::json) --precision
-		,
-		('poubelle_paris_axis'
-			, 'The axis were manually created by people from geohistorical data project, and ufrther corrected/validated by Benoit Combes for the inner part of Fermier Generaux, and not corrected for outside'
-			, 'details on data : rules of creation, validation process, known limitations, etc. 
-				Initially, the axis name used abbreviation : "PL" for "place", etc. The abbrebeviation were expanded to initial meaning by Rémi Cura '
-			, sfti_makesfti(2007, 2007, 2016, 2016)  -- date of data creation
-			, '{"default": 1, "road_axis":3, "building":0.5, "number":1.5}'::json) --precision
-		, ('poubelle_paris_number'
-			, 'mix of manual and automatic creation for numbers of poubelle, which are not explicitely present in the original map.'
-			, 'Poubelle only contains numbers at the beginning and end of ways. mThis numbers were manually added by people from Geohistorical data project, but many are still missing.
-			Therefore Rémi Cura wrote methods to complete the missing data as best as we can and generate numbers position by linear interpolation.
-			The number were placed at a given distance of axis. 
-			details on data : rules of creation, validation process, known limitations, etc. '
-			, sfti_makesfti(2012, 2012, 2016, 2016)  -- date of data creation
-			, '{"default": 1, "road_axis":3, "building":0.5, "number":1.5, "number_semantic":0.9}'::json) --precision
-	*/	
+		/*
+			INSERT INTO geohistorical_object.numerical_origin_process VALUES
+			('poubelle_paris_axis_audela_fermiers_generaux'
+				, 'The axis were manually created by people from geohistorical data project, but not ufrther corrected/validated by Benoit Combes'
+				, 'details on data : rules of creation, validation process, known limitations, etc. 
+				the file used was provided by Benoit and named "poubelle_TEMPORAIRE.shp"
+					Initially, the axis name used abbreviation : "PL" for "place", etc. The abbrebeviation were expanded to initial meaning by Rémi Cura '
+				, sfti_makesfti(2007, 2007, 2016, 2016)  -- date of data creation
+				, '{"default": 3, "road_axis":5, "number":4}'::json) --precision
+			,
+			('poubelle_paris_axis'
+				, 'The axis were manually created by people from geohistorical data project, and ufrther corrected/validated by Benoit Combes for the inner part of Fermier Generaux, and not corrected for outside'
+				, 'details on data : rules of creation, validation process, known limitations, etc. 
+					Initially, the axis name used abbreviation : "PL" for "place", etc. The abbrebeviation were expanded to initial meaning by Rémi Cura '
+				, sfti_makesfti(2007, 2007, 2016, 2016)  -- date of data creation
+				, '{"default": 1, "road_axis":3, "building":0.5, "number":1.5}'::json) --precision
+			, ('poubelle_paris_number'
+				, 'mix of manual and automatic creation for numbers of poubelle, which are not explicitely present in the original map.'
+				, 'Poubelle only contains numbers at the beginning and end of ways. mThis numbers were manually added by people from Geohistorical data project, but many are still missing.
+				Therefore Rémi Cura wrote methods to complete the missing data as best as we can and generate numbers position by linear interpolation.
+				The number were placed at a given distance of axis. 
+				details on data : rules of creation, validation process, known limitations, etc. '
+				, sfti_makesfti(2012, 2012, 2016, 2016)  -- date of data creation
+				, '{"default": 1, "road_axis":3, "building":0.5, "number":1.5, "number_semantic":0.9}'::json) --precision
+		*/	
 
 	
 
@@ -170,15 +170,15 @@ en 21 feuilles dressé à l’échelle de 1/5000 résume les travaux des géomè
 	-- what kind of shortening are used in 'type_voie'
 	
 	SELECT type_voie, count(*) as c , max(nom_1888)
-	FROM poubelle_src
+	FROM poubelle_src_merged
 	GROUP BY type_voie
 	ORDER BY type_voie; 
 
 	WITH first_word AS (
 		SELECT substring(nom_1888, '^(\w+)\s.*?$')as fw ,nom_1888 
-		FROM poubelle_src
+		FROM poubelle_src_merged
 	)
-	SELECT fw, count(*) AS c, max(nom_1888)
+	SELECT fw, count(*) AS c, min(nom_1888)
 	FROM first_word
 	GROUP BY  fw
 	ORDER BY fw; 
@@ -190,16 +190,21 @@ en 21 feuilles dressé à l’échelle de 1/5000 résume les travaux des géomè
 	, type_voie text
 	, type_voie_full text
 	) ;
+	TRUNCATE poubelle_type_voie_mapping ;
 
 	INSERT INTO poubelle_type_voie_mapping (type_voie, type_voie_full) VALUES
 		('ALL','allée'),
 		('AV','avenue'),
 		('BD','boulevard'),
+		('C', 'cité'),
 		('CAR','carrefour'),
+		('CHE','chemin'),
+		('CHS', 'chaussée'),
 		('CITE','cité'),
 		('COUR','cour'),
 		('CRS','cours'),
-		('GAL','galerie'),
+		('GAL','galerie'), 
+		('HAM', 'hameau'),
 		('IMP','impasse'),
 		('IMPASSE','impasse'),
 		('PAS','passage'),
@@ -215,6 +220,7 @@ en 21 feuilles dressé à l’échelle de 1/5000 résume les travaux des géomè
 		('RLE','ruelle'),
 		('RPT','rond-point'),
 		('RUE','rue'),
+		('SEN', 'sentier'),
 		('SQ','square'),
 		('VLA','villa'),
 		('VOI','voie'),
@@ -241,7 +247,7 @@ en 21 feuilles dressé à l’échelle de 1/5000 résume les travaux des géomè
 	DROP TABLE IF EXISTS poubelle_number ; 
 	CREATE TABLE poubelle_number(
 		gid serial primary key , 
-		road_axis_id int REFERENCES poubelle_axis(id)
+		road_axis_id int REFERENCES poubelle_axis(gid)
 	) INHERITS (precise_localisation) ; 
 	TRUNCATE poubelle_number CASCADE ; 
 	
@@ -466,17 +472,17 @@ en 21 feuilles dressé à l’échelle de 1/5000 résume les travaux des géomè
 		DROP TABLE IF EXISTS test_generating_number ; 
 		 CREATE TABLE test_generating_number AS  
 			WITH all_sides AS (
-				SELECT pa.gid,  pa.geom road_axis, approx_road_width , adr_dg88 start_number , adr_fg88 end_number,true AS is_left_side, nom_1888
+				SELECT pa.gid,  pa.geom road_axis, approx_road_width , adr_dg88 start_number , adr_fg88 end_number,true AS is_left_side, nom_1888, normalised_name, historical_name
 				FROM poubelle_axis AS pa
 					LEFT OUTER JOIN poubelle_src_merged AS pb USING (gid )
 					LEFT OUTER JOIN poubelle_axis_approx_width AS pw USING(gid)
 				UNION ALL 
-				SELECT  pa.gid, pa.geom road_axis, approx_road_width , adr_dd88 start_number , adr_fd88 end_number, false AS is_left_side, nom_1888
+				SELECT  pa.gid, pa.geom road_axis, approx_road_width , adr_dd88 start_number , adr_fd88 end_number, false AS is_left_side, nom_1888, normalised_name, historical_name
 				FROM poubelle_axis AS pa
 					LEFT OUTER JOIN poubelle_src_merged AS pb USING (gid )
 					LEFT OUTER JOIN poubelle_axis_approx_width AS pw USING(gid)
 			)
-			SELECT al.gid, nom_1888, f.*
+			SELECT al.gid, nom_1888,normalised_name,historical_name, f.*
 			FROM  all_sides AS al
 				, outils_geocodage.numerotation2float(start_number  ) AS sn
 				, outils_geocodage.numerotation2float(end_number) AS en
@@ -494,9 +500,7 @@ en 21 feuilles dressé à l’échelle de 1/5000 résume les travaux des géomè
 				AND abs(sn::int-en::int)>2;
 				
 
-		SELECT * --count(*)
-		FROM test_generating_number
-		WHERE numbers_value IS NULL ; 
+	
 
 		DROP TABLE IF EXISTS poubelle_visu_fail_numbering ; 
 		CREATE TABLE poubelle_visu_fail_numbering AS
@@ -526,7 +530,34 @@ en 21 feuilles dressé à l’échelle de 1/5000 résume les travaux des géomè
 				( fd88 != 0 AND dd88 != 0 ) AND (fd88 + dd88)&1 =1
 				OR --number on opposite side should have opposite parity
 				(greatest(fg88, dg88) + greatest(fd88, dd88) ) &1 = 0  ; 
-				
+
+		SELECT * --count(*)
+		FROM test_generating_number
+		-- WHERE numbers_value IS NULL
+		WHERE normalised_name IS NOT NULL
+		LIMIT 100 ; 
+
+	-- inserting the numbers in the geoloc table
+	INSERT INTO poubelle_number (historical_name, normalised_name, geom, specific_fuzzy_date, specific_spatial_precision, historical_source, numerical_origin_process
+		, associated_normalised_rough_name
+		-- , gid 
+		 ,  road_axis_id )
+		SELECT outils_geocodage.float2numerotation(numbers_value) || ' '|| historical_name AS historical_name
+			,   outils_geocodage.float2numerotation(numbers_value) || ' ' ||  normalised_name  AS normalised_name
+			,number_geom AS geom
+			,NULL AS specific_fuzzy_date
+			,NULL AS specific_spatial_precision 
+			, 'poubelle_municipal_paris' AS historical_source
+			, 'poubelle_paris_number' AS numerical_origin_process
+			, normalised_name
+			,   gid
+		FROM  
+			test_generating_number
+			WHERE numbers_value is not null ; 
+
+			SELECT *
+			FROM poubelle_number
+			LIMIT 100 ; 
  /*
 -- NOTE : to properly generate numbers, we should 
 		  
