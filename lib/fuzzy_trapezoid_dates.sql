@@ -225,7 +225,7 @@ CREATE CAST (sfti AS geometry(polygon,0))
 
 	
 SELECT (make_date(floor(i_relative_date)::int,1,1) +  age(to_timestamp(ceiling(i_relative_date)*365*24*60*60), to_timestamp( i_relative_date*365*24*60*60) ))::date
-FROM CAST('1859.6' AS float) AS i_relative_date
+FROM CAST('1859.6' AS float) AS i_relative_date ;
 
 
 DROP FUNCTION IF EXISTS yearfloat2date(   IN yearfloat float,  OUT yeardate date); 
