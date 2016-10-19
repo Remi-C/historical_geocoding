@@ -25,6 +25,16 @@
 	ALTER TABLE ign_bdadresse_axis_src ALTER COLUMN geom TYPE geometry(MultilinestringZ,2154) USING ST_SetSRID(ST_Force3D(geom),2154)  ; 
 	ALTER TABLE ign_commune_src  ALTER COLUMN geom TYPE geometry(Multipolygon,2154) USING ST_SetSRID( geom, 2154)  ; 
 
+	-- loading the list of shortenign used in road name :
+	DROP TABLE IF EXISTS ign_bdtopo_abbreviations ; 
+	CREATE TABLE IF NOT EXISTS ign_bdtopo_abbreviations(
+		nom_complet text PRIMARY KEY
+		, abbreviation text
+	); 
+	COPY ign_bdtopo_abbreviations FROM '/media/sf_RemiCura/DATA/Donnees_IGN/BD TOPO/abbreviation_nom_rue.csv' DELIMITER ';' CSV HEADER;
+
+	SELECT *
+	FROM ign_bdtopo_abbreviations ; 
  
 	
 	SELECT *
@@ -97,8 +107,8 @@
 -- creating the geocoding tables : 
 	DROP TABLE IF EXISTS ign_paris_axis CASCADE; 
 	CREATE TABLE ign_paris_axis(
-		gid serial primary key REFERENCES ign_bdadresse_axis_src(gid)
-		, clef_bdtopo text UNIQUE
+		gid serial  REFERENCES ign_bdadresse_axis_src(gid)
+		, clef_bdtopo text  
 	) INHERITS (rough_localisation) ;  
 	TRUNCATE ign_paris_axis CASCADE ; 
 
@@ -111,7 +121,7 @@
 	DROP TABLE IF EXISTS ign_paris_number ; 
 	CREATE TABLE ign_paris_number(
 		gid serial primary key  REFERENCES ign_bdadresse_src(gid) 
-		, clef_bdtopo text REFERENCES ign_paris_axis(clef_bdtopo ) 
+		, clef_bdtopo text --REFERENCES ign_paris_axis(clef_bdtopo ) 
 	) INHERITS (precise_localisation) ; 
 	TRUNCATE ign_paris_number CASCADE ; 
 	
@@ -176,11 +186,129 @@
 
 -- preparing to fill the axis table
 	--first road name contain shortening, which is annoying for normalised name
-	--checking the list of shortening used in the road name of 
+	--<e ened to remove these
 
-	
-	SELECT  nom_rue_ga AS nr_g, nom_rue_dr AS nr_d, cleabs, code_posta As code_postal, daterec, geom 
+	SELECT *
 	FROM ign_bdadresse_axis_src
-	WHERE nom_rue_ga !=  nom_rue_dr;  
+	WHERE nom_rue_dr IS NOT NULL
+	LIMIT 10
 
-	--because road name on left and on right side may not be the same, 
+	SELECT type_voie, count(*) as c , max(nom_1888)
+	FROM ign_bdadresse_axis_src
+	GROUP BY type_voie
+	ORDER BY type_voie; 
+
+	WITH first_word AS (
+		SELECT fw ,nom_rue_dr 
+		FROM ign_bdadresse_axis_src
+			, substring(nom_rue_dr, '^(\w+)\s.*?$')as fw
+		WHERE nom_rue_dr = nom_rue_ga
+			AND char_length(fw) <= 3
+	)
+	SELECT fw, count(*) AS c, min(nom_rue_dr)
+	FROM first_word
+	GROUP BY  fw
+	ORDER BY fw; 
+
+	-- translation of abbreviation is in 'ign_bdtopo_abbreviations'
+	SELECT *
+	FROM ign_bdtopo_abbreviations
+
+	-- insert axis (if different name on left and right, insert it 2 times)
+
+	TRUNCATE ign_paris_axis  CASCADE;
+	INSERT INTO ign_paris_axis (historical_name, normalised_name, geom, specific_fuzzy_date, specific_spatial_precision, historical_source, numerical_origin_process, gid, clef_bdtopo ) 
+		SELECT 
+			nom_rue_dr
+			, clean_text(nom_rue_dr) 
+			,geom
+			, sfti_makesfti((daterec::date - '1 year'::interval)::date,daterec::date, '2015/01/01'::date,'2016/06/01'::date)--daterec
+			, NULL::float
+			, 'ign_paris'
+			, 'ign_paris_axis'
+			, gid 
+			,cleabs  
+		FROM (
+			SELECT nom_rue_dr, geom, daterec, gid, cleabs
+			FROM ign_bdadresse_axis_src
+			WHERE nom_rue_dr ILIKE nom_rue_ga
+			OR nom_rue_dr IS NULL OR nom_rue_ga IS  NULL
+		UNION ALL   --because road name on left and on right side may not be the same, we duplicate the road that have several name
+			SELECT nom_rue_dr, geom, daterec, gid, cleabs
+			FROM   ign_bdadresse_axis_src
+			WHERE nom_rue_dr NOT ILIKE  nom_rue_ga
+		UNION ALL 
+			SELECT nom_rue_ga AS nom_rue_dr, geom, daterec, gid, cleabs
+			FROM   ign_bdadresse_axis_src
+			WHERE nom_rue_dr NOT ILIKE nom_rue_ga 
+		) AS sub  ;
+ 
+	--now we need to correct the inserted axis so they dont use the sshortening in normalised_name
+	WITH potential_abbr AS (
+		SELECT  fw , count(*) AS c, max(normalised_name) as ex
+		FROM ign_paris_axis
+			, substring(normalised_name, '^(\w+)\s.*?$')as fw
+		WHERE normalised_name is not null
+			AND char_length(fw) <= 3
+		GROUP BY fw
+		ORDER BY fw asc
+	)
+	SELECT * --nom_complet
+	FROM potential_abbr AS pa
+		LEFT OUTER JOIN ign_bdtopo_abbreviations AS ig ON (pa.fw ILIKE ig.abbreviation) 
+	LIMIT 100
+ 
+	WITH to_be_updated_1 AS (
+		SELECT  pa.historical_name, pa.gid, pa.geom, normalised_name, fw, abbreviation, nom_complet , postfix
+		FROM ign_paris_axis AS pa
+			, substring(normalised_name, '^\w+(\s.*?)$') as postfix   
+			, substring(normalised_name, '^(\w+)\s.*?$')as fw
+			,LATERAL ( SELECT DISTINCT ON(abbreviation ) ign_bdtopo_abbreviations.* FROM  ign_bdtopo_abbreviations WHERE  fw ILIKE  abbreviation ORDER BY abbreviation, char_length(nom_complet) ASC) AS ig
+		WHERE normalised_name is not null AND fw IS NOT NULL 
+			AND char_length(fw) <= 4
+			AND nom_complet IS NOT NULL 
+	)  
+	UPDATE ign_paris_axis AS pa SET normalised_name =  cv.nom_complet || postfix 
+	FROM to_be_updated_1 AS cv
+	WHERE pa.gid = cv.gid AND pa.normalised_name = cv.normalised_name AND pa.geom = cv.geom; 
+
+
+	SELECT *
+	FROM ign_paris_axis
+	WHERE normalised_name is not null
+	LIMIT 100 ; 
+
+
+
+-- preparing to fill the number table
+	--number references roads with some shortening in it, which is annoying
+	
+	SELECT *
+	FROM ign_bdadresse_src AS num 
+		 LEFT OUTER JOIN ign_paris_axis AS ax ON(num.lien_objet = ax.clef_bdtopo ) 
+	 WHERE ax.gid IS NULL
+	LIMIT 1  ; 
+
+	TRUNCATE ign_paris_number ;
+	INSERT INTO ign_paris_number (historical_name, normalised_name, geom, specific_fuzzy_date, specific_spatial_precision, historical_source, numerical_origin_process, gid, clef_bdtopo ) 
+		SELECT DISTINCT ON (ad.gid)  
+			numero || ' ' || ad.nom_voie
+			,numero || ' ' || COALESCE(clean_text(ax.normalised_name), ad.nom_voie)
+			, ad.geom
+			, CASE WHEN daterec IS NULL THEN NULL ELSE  sfti_makesfti((daterec::date - '1 year'::interval)::date,daterec::date, '2015/01/01'::date,'2016/06/01'::date)END
+			, NULL
+			, 'ign_paris'
+			, 'ign_paris_number'
+			, ad.gid
+			, ad.lien_objet  
+		FROM ign_bdadresse_src AS ad
+			, ign_paris_axis AS ax 
+		WHERE ad.lien_objet = ax.clef_bdtopo  ; 
+			--AND ax.normalised_name IS NOT NULL ; 
+
+
+	SELECT *
+	FROM ign_paris_number  
+	LIMIT 100; 
+ 
+ 
