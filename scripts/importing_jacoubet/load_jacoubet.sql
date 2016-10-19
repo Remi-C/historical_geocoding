@@ -275,10 +275,11 @@
 	--inserting quartier in rough_localisation
 		--SELECT max(gid) FROM jacoubet_axis ; 
 		--ALTER SEQUENCE jacoubet_paris.jacoubet_axis_gid_seq INCREMENT BY 4266 ; 
+	TRUNCATE jacoubet_quartier ;
 	INSERT INTO jacoubet_quartier(historical_name, normalised_name, geom, specific_fuzzy_date, specific_spatial_precision, historical_source, numerical_origin_process)
 		SELECT
 			cleaned_quartier AS historical_name
-			,geohistorical_object.clean_text(cleaned_quartier)   AS normalised_name
+			,'quartier '||geohistorical_object.clean_text(cleaned_quartier)   AS normalised_name
 			,ST_Transform(geom , 2154) AS geom
 			,NULL AS specific_fuzzy_date
 			,NULL AS specific_spatial_precision 
