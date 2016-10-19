@@ -184,7 +184,7 @@ CREATE OR REPLACE FUNCTION sfti_distance(    IN i_sfti1 sfti, IN i_sfti2 sfti, I
 			IF bmin IS NULL OR bmax IS NULL THEN 
 				SELECT xmin, xmax INTO bmin,bmax FROM sfti_xminmax(i_sfti1,i_sfti2) ; 
 			END IF; 
-
+		
 			 
 			SELECT  AuB -  AintB
 					--+ ST_Area(ST_Union(compl_A,compl_B)) -
@@ -194,6 +194,32 @@ CREATE OR REPLACE FUNCTION sfti_distance(    IN i_sfti1 sfti, IN i_sfti2 sfti, I
 					,  sfti_trapeze_complement(i_sfti1,bmin,bmax) AS compl_A
 					, sfti_trapeze_complement(i_sfti2,bmin,bmax) AS compl_B 
 					, ST_Area(ST_Union(A,B))as AuB
+					, ST_Area(ST_Intersection(A,B)) AS AintB;  
+			
+	RETURN ; END ; 
+	$BODY$
+LANGUAGE plpgsql IMMUTABLE CALLED ON NULL INPUT; 
+
+
+DROP FUNCTION IF EXISTS sfti_distance_asym(   IN i_sfti1 sfti, IN i_sfti2 sfti, INOUT bmin float  , INOUT bmax float , OUT fuzzy_distance float ); 
+CREATE OR REPLACE FUNCTION sfti_distance_asym(    IN i_sfti1 sfti, IN i_sfti2 sfti, INOUT bmin float DEFAULT NULL, INOUT bmax float DEFAULT NULL, OUT fuzzy_distance float   ) AS 
+	$BODY$
+		--@brief : this function takes two stfi A and B and compute a fuzzy distance measure 
+		DECLARE      
+		BEGIN 	
+			--distance from A to B (not the same as from B to A)
+			-- geom_dist(A,B) + area(A) - shared_area(A,B)
+
+			IF bmin IS NULL OR bmax IS NULL THEN 
+				SELECT xmin, xmax INTO bmin,bmax FROM sfti_xminmax(i_sfti1,i_sfti2) ; 
+			END IF; 
+		
+			 
+			SELECT ST_Distance(A,B) + ST_Area(A) - AintB
+				INTO fuzzy_distance
+			FROM sfti2geom(i_sfti1) AS A, sfti2geom(i_sfti2) AS B
+					,  sfti_trapeze_complement(i_sfti1,bmin,bmax) AS compl_A
+					, sfti_trapeze_complement(i_sfti2,bmin,bmax) AS compl_B  
 					, ST_Area(ST_Intersection(A,B)) AS AintB;  
 			
 	RETURN ; END ; 
