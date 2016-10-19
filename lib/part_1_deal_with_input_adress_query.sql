@@ -104,12 +104,19 @@ Part 1
 		DECLARE   
 		BEGIN  
 			SELECT   jsonb_extract_path_text(f,'city'::text)
-			, jsonb_extract_path_text(f,'road'::text)
-			, jsonb_extract_path_text(f,'house_number'::text)
-				INTO city, road_name, house_number
-			FROM  postal_parse(adress_query ) as f ; 
+				, jsonb_extract_path_text(f,'road'::text)
+				, jsonb_extract_path_text(f,'house_number'::text)
+					INTO city, road_name, house_number
+			FROM  postal_parse(adress_query  ) as f ; 
 			IF city IS NULL THEN 
-				city := default_city ; 
+				SELECT   jsonb_extract_path_text(f,'city'::text)
+					, jsonb_extract_path_text(f,'road'::text)
+					, jsonb_extract_path_text(f,'house_number'::text)
+						INTO city, road_name, house_number
+					FROM  postal_parse(adress_query|| ' , '||  default_city ) as f ;
+				IF city IS NULL THEN  
+					city := default_city ; 
+				END IF ; 
 			END IF ; 
 				
 			RETURN ; 
@@ -166,10 +173,90 @@ Part 1
 	FROM  outils_geocodage.normalise_numbering('12b') AS f  ; 
 
 -------- 1.2 : Match ------------
-	---------- 1.2.3 match numering 					 --------
-	---------- 1.2.1 match street /city name 				 --------
-	---------- 1.2.2 match date 						 --------
+	--complete system  : the database has already been filled with various historical and current data
+		--getting test data : 
+		SELECT gid, adresse,   city, road_name, house_number
+			FROM test_extension.test_sample_adress 
+				, outils_geocodage.normalise_parse_adress(replace(adresse, ' R ',' rue ')|| ', Paris', 'Paris')  
+			LIMIT 100 ; 
 
+	---------- 1.2.1 match street /city name 				 --------
+		--testing to find a street name :
+		WITH input_adress AS (
+			SELECT gid, adresse,   city, road_name, house_number, fuzzy_date
+			FROM test_extension.test_sample_adress 
+				, outils_geocodage.normalise_parse_adress(replace(adresse, ' R ',' rue ')|| ', Paris', 'Paris')  
+			WHERE gid = 36
+		)
+		SELECT *, similarity(road_name, normalised_name ) 
+		FROM input_adress, historical_geocoding.rough_localisation
+		WHERE road_name % normalised_name
+		ORDER BY road_name <-> normalised_name 
+		LIMIT 100;
+
+		--testing to find a city
+		WITH input_adress AS (
+			SELECT gid, adresse,   city, road_name, house_number, fuzzy_date
+			FROM test_extension.test_sample_adress 
+				, outils_geocodage.normalise_parse_adress(replace(adresse, ' R ',' rue ')|| ', Paris', 'Paris')  
+			WHERE gid = 36
+		)
+		SELECT *, similarity(city, normalised_name ) 
+		FROM input_adress, historical_geocoding.rough_localisation
+		WHERE city % normalised_name
+		ORDER BY city <-> normalised_name 
+		LIMIT 100;
+
+		--testing to find a quartier :
+		WITH input_adress AS (
+			SELECT 'quartier du Palais-Royal'::text AS quartier_name
+		)
+		SELECT *, similarity(quartier_name, normalised_name ) 
+		FROM input_adress, historical_geocoding.rough_localisation
+		WHERE quartier_name % normalised_name
+		ORDER BY quartier_name <-> normalised_name 
+		LIMIT 100;
+
+	
+	---------- 1.2.2 match date 						 --------
+	/* -- TODO
+		WITH input_adress AS (
+			SELECT gid, adresse,   city, road_name, house_number, fuzzy_date
+			FROM test_extension.test_sample_adress 
+				, outils_geocodage.normalise_parse_adress(replace(adresse, ' R ',' rue ')|| ', Paris', 'Paris')  
+			WHERE gid = 54
+		)
+		--SELECT sfti_distance_asym(
+		*/
+		
+	
+		
+	
+	---------- 1.2.3 match numbering 					 --------
+		--testing the numbering match
+		--numbering result is an union of 2 results
+		
+		WITH input_adress AS (
+			SELECT ''
+			SELECT gid, adresse,   city, road_name, house_number, fuzzy_date, house_number ||  ' ' ||road_name AS norm_adress
+			FROM test_extension.test_sample_adress 
+				, outils_geocodage.normalise_parse_adress(replace(adresse, ' R ',' rue ')|| ', Paris', 'Paris')  
+			WHERE gid = 54
+		)-- get numbers that directly habe in normalised_name the correct adress
+		SELECT similarity(norm_adress, normalised_name) , precise_localisation.*
+		FROM input_adress, historical_geocoding.precise_localisation
+		WHERE norm_adress % normalised_name
+		ORDER BY norm_adress <-> normalised_name 
+		LIMIT 30
+
+		WITH input_adress AS (
+ 
+			SELECT   city, road_name, house_number,   house_number ||  ' ' ||road_name AS norm_adress
+			FROM  outils_geocodage.normalise_parse_adress('12, rue des pretres st-severin'|| ', Paris', 'Paris')   
+		)-- get roads that matches, then get number attached to these roads that contain the correct number
+		
+		
+		
 
 	
 	
@@ -196,6 +283,7 @@ Part 1
 	CREATE  TABLE input_csv(
 	date_b text
 	, adresse text
+	, source text
 	); 
 	-- copying the data from the file to thet table. Files are in CSV format
 
@@ -204,7 +292,45 @@ Part 1
 		'/media/sf_RemiCura/DATA/Donnees_belleepoque/sample_adresse_date_from_coulisse.csv'
 	WITH (FORMAT CSV, DELIMITER ';', ENCODING  'LATIN1');
 
+	COPY input_csv (date_b, adresse)
+	FROM 
+		'/media/sf_RemiCura/DATA/Donnees_belleepoque/sample_adresse_date_from_ras.csv'
+	WITH (FORMAT CSV, DELIMITER ';', ENCODING  'LATIN1');
 
+	WITH to_be_updated AS (
+		SELECT date_b, adresse, 'ras' as source
+		FROM input_csv
+		WHERE char_length(date_b) > 5
+		UNION ALL 
+		SELECT date_b, adresse, 'coulisse'
+		FROM input_csv
+		WHERE char_length(date_b) <= 5
+	)
+	UPDATE input_csv AS i SET  source =  tbu.source 
+	FROM to_be_updated AS tbu 
+	WHERE i.date_b = tbu.date_b AND i.adresse = tbu.adresse   ; 
+
+	DROP TABLE IF EXISTS test_extension.test_sample_adress ; 
+	CREATE TABLE test_extension.test_sample_adress(
+		gid serial primary key
+		,date_b text
+		, adresse text
+		, source text
+		, fuzzy_date sfti
+	) ;
+	INSERT INTO test_extension.test_sample_adress (date_b, adresse, source, fuzzy_date) 
+	SELECT date_b, adresse, source, sfti_makesfti((date_b::date-'1 year'::interval)::date, date_b::date, date_b::date,(date_b::date+'1 year'::interval)::date )
+	FROM input_csv
+	WHERE date_b ILIKE '__/__/____'
+	UNION ALL 
+	SELECT date_b, adresse, source, sfti_makesfti(date_b::int-1,date_b::int,date_b::int, date_b::int+1 )
+	FROM input_csv
+	WHERE date_b ILIKE '____' ;
+	
+	SELECT *
+	FROM test_sample.
+	SELECT *
+	FROM input_csv
 	
 	INSERT INTO example_adress_query (adress_query,date_query )
 		SELECT adresse, date_b 
