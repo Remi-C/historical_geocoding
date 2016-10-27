@@ -236,8 +236,7 @@ Part 1
 		--testing the numbering match
 		--numbering result is an union of 2 results
 		
-		WITH input_adress AS (
-			SELECT ''
+		WITH input_adress AS ( 
 			SELECT gid, adresse,   city, road_name, house_number, fuzzy_date, house_number ||  ' ' ||road_name AS norm_adress
 			FROM test_extension.test_sample_adress 
 				, outils_geocodage.normalise_parse_adress(replace(adresse, ' R ',' rue ')|| ', Paris', 'Paris')  
@@ -246,6 +245,7 @@ Part 1
 		SELECT similarity(norm_adress, normalised_name) , precise_localisation.*
 		FROM input_adress, historical_geocoding.precise_localisation
 		WHERE norm_adress % normalised_name
+			-- AND numrange(0::numeric,(ST_MinimumBoundingRadius(geom)).radius::numeric) <-> numrange(0,30)
 		ORDER BY norm_adress <-> normalised_name 
 		LIMIT 30
 
@@ -257,6 +257,97 @@ Part 1
 		
 		
 		
+
+
+DROP FUNCTION IF EXISTS historical_geocoding.geocode_name( 
+	query_adress text, query_date sfti, target_scale_range numrange
+	, ordering_priority_function text  
+	, semantic_distance_range numrange, temporal_distance_range sfti, scale_distance_range numrange 
+	, optional_reference_geometry geometry(multipolygon,2154)  
+	, optional_spatial_distance_range numrange  
+	); 
+CREATE OR REPLACE FUNCTION historical_geocoding.geocode_name(
+	query_adress text, query_date sfti, target_scale_range numrange
+	, ordering_priority_function text DEFAULT ' 10 * semantic + 5 * temporal  + 0.01 * scale + 0.001 * spatial '
+	, semantic_distance_range numrange DEFAULT numrange(0.5,1), temporal_distance_range sfti DEFAULT sfti_makesfti(1820,1820,2000,2000), scale_distance_range numrange DEFAULT numrange(0,30)
+	, optional_reference_geometry geometry(multipolygon,2154) DEFAULT NULL
+	, optional_spatial_distance_range numrange DEFAULT NULL)
+RETURNS table(rank int,
+		  historical_name text,
+		  normalised_name text,
+		  geom geometry,
+		  specific_fuzzy_date sfti,
+		  specific_spatial_precision float,
+		  historical_source text ,
+		  numerical_origin_process text 
+	, semantic_score float
+	, temporal_score float
+	, scale_score float
+	, spatial_score float
+	, aggregated_score float
+	, confidence_in_result float) AS 
+	$BODY$
+		--@brief : this function takes an adress and date query, as well as a metric, and tries to find the best match in the database
+		--@param : results can be constrained further by limitating allowed semantic, temporal, scale, and spatial distance
+		--@param : there is a 4th optional distance : spatial distance. In this one, the user shall provide a geometry, then results are evaluated also based on the geodesic dist ot thi surface.
+		
+		DECLARE 
+			_sql text := NULL ; 
+		BEGIN  
+			-- cleaning input?
+			
+			_sql := 'SELECT (row_number() over())::int as rank,
+					 rl.historical_name ,
+					  rl.normalised_name  ,
+					  rl.geom  ,
+					  rl.specific_fuzzy_date ,
+					  rl.specific_spatial_precision ,
+					  rl.historical_source ,
+					  rl.numerical_origin_process 
+					 
+				, semantic_score, temporal_distance, scale_distance, spatial_distance
+				, aggregated_score
+				, 1::float AS confidence_in_result
+			FROM  historical_geocoding.rough_localisation AS rl 
+				LEFT OUTER JOIN geohistorical_object.historical_source as hs ON (rl.historical_source = hs.short_name)
+				, CAST(similarity(normalised_name, $1) AS float) AS semantic_score 
+				,CAST( (sfti_distance_asym(COALESCE(rl.specific_fuzzy_date,hs.default_fuzzy_date), $2) ).fuzzy_distance AS float) AS temporal_distance
+				, least( abs((ST_MinimumBoundingRadius(geom)).radius  - lower($3)),abs((ST_MinimumBoundingRadius(geom)).radius  - upper($3))) AS scale_distance
+				, ST_Distance($4::geometry, rl.geom) AS spatial_distance
+				, CAST (10*(1-semantic_score) + 0.1 * temporal_distance + 0.01 * scale_distance +  0.001 * spatial_distance AS float) AS aggregated_score
+				
+			WHERE 
+				normalised_name % $1 --semantic distance
+				--normalised_name <-> $1 --semantic distance
+				--OR COALESCE(rl.specific_fuzzy_date::geometry,hs.default_fuzzy_date::geometry) <-> $2::geometry --temporal distance
+				--OR  numrange(0,ST_MinimumBoundingRadius(geom)) && $3 -- scale distance 
+				--OR $4::geometry <-> rl.geom
+			ORDER BY aggregated_score ASC
+				
+			LIMIT 100 ;' ;
+
+			RETURN QUERY EXECUTE _sql USING query_adress, query_date, target_scale_range, optional_reference_geometry ; 
+
+			
+		RETURN ;
+		END ; 
+	$BODY$
+LANGUAGE plpgsql  VOLATILE CALLED ON NULL INPUT; 
+
+
+SELECT f.*
+FROM historical_geocoding.geocode_name(
+	query_adress:='12 rue du temple, Paris'
+	, query_date:= sfti_makesfti('1872-11-15'::) -- sfti_makesftix(1872,1873,1880,1881)  -- sfti_makesfti('1972-11-15');
+	, target_scale_range := numrange(0,30)
+	, ordering_priority_function := '100 * semantic + 5 * temporal  + 0.01 * scale + 0.001 * spatial '
+		, semantic_distance_range := numrange(0.5,1)	
+		, temporal_distance_range:= sfti_makesfti(1820,1820,2000,2000)
+		, scale_distance_range := numrange(0,30) 
+		, optional_reference_geometry := ST_Buffer(ST_GeomFromText('POINT(652208.7 6861682.4)',2154),5)
+		, optional_spatial_distance_range := numrange(0,10000)
+) AS  f
+
 
 	
 	
