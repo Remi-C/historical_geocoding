@@ -257,8 +257,6 @@ Part 1
 		
 		
 		
-
-
 DROP FUNCTION IF EXISTS historical_geocoding.geocode_name( 
 	query_adress text, query_date sfti, target_scale_range numrange
 	, ordering_priority_function text  
@@ -305,16 +303,16 @@ RETURNS table(rank int,
 					  rl.historical_source ,
 					  rl.numerical_origin_process 
 					 
-				, semantic_score, temporal_distance, scale_distance, spatial_distance
-				, aggregated_score
+				, semantic_score::float, temporal_distance::float, scale_distance::float, spatial_distance::float
+				, aggregated_score::float
 				, 1::float AS confidence_in_result
-			FROM  historical_geocoding.rough_localisation AS rl 
+			FROM  historical_geocoding.precise_localisation AS rl 
 				LEFT OUTER JOIN geohistorical_object.historical_source as hs ON (rl.historical_source = hs.short_name)
-				, CAST(similarity(normalised_name, $1) AS float) AS semantic_score 
-				,CAST( (sfti_distance_asym(COALESCE(rl.specific_fuzzy_date,hs.default_fuzzy_date), $2) ).fuzzy_distance AS float) AS temporal_distance
+				, COALESCE(similarity(normalised_name, $1), 0) AS semantic_score 
+				, COALESCE( (sfti_distance_asym(COALESCE(rl.specific_fuzzy_date,hs.default_fuzzy_date), $2) ).fuzzy_distance,0) AS temporal_distance
 				, least( abs((ST_MinimumBoundingRadius(geom)).radius  - lower($3)),abs((ST_MinimumBoundingRadius(geom)).radius  - upper($3))) AS scale_distance
-				, ST_Distance($4::geometry, rl.geom) AS spatial_distance
-				, CAST (10*(1-semantic_score) + 0.1 * temporal_distance + 0.01 * scale_distance +  0.001 * spatial_distance AS float) AS aggregated_score
+				, COALESCE(ST_Distance($4::geometry, rl.geom),0) AS spatial_distance
+				, CAST (100*(1-semantic_score) + 0.1 * temporal_distance + 0.01 * scale_distance +  0.001 * spatial_distance AS float) AS aggregated_score
 				
 			WHERE 
 				normalised_name % $1 --semantic distance
@@ -324,7 +322,7 @@ RETURNS table(rank int,
 				--OR $4::geometry <-> rl.geom
 			ORDER BY aggregated_score ASC
 				
-			LIMIT 100 ;' ;
+			LIMIT 1 ;' ;
 
 			RETURN QUERY EXECUTE _sql USING query_adress, query_date, target_scale_range, optional_reference_geometry ; 
 
@@ -334,22 +332,64 @@ RETURNS table(rank int,
 	$BODY$
 LANGUAGE plpgsql  VOLATILE CALLED ON NULL INPUT; 
 
+--SELECT set_limit(0.7) ;
 
-SELECT f.*
+
+SELECT f.rank, f.normalised_name, f.historical_source, f.semantic_score, f.temporal_score, f.spatial_score, f.aggregated_score
 FROM historical_geocoding.geocode_name(
-	query_adress:='12 rue du temple, Paris'
-	, query_date:= sfti_makesfti('1872-11-15'::) -- sfti_makesftix(1872,1873,1880,1881)  -- sfti_makesfti('1972-11-15');
+	query_adress:='44 rue saint jacques '
+	, query_date:= sfti_makesfti('1872-11-15'::date) -- sfti_makesftix(1872,1873,1880,1881)  -- sfti_makesfti('1972-11-15');
 	, target_scale_range := numrange(0,30)
 	, ordering_priority_function := '100 * semantic + 5 * temporal  + 0.01 * scale + 0.001 * spatial '
 		, semantic_distance_range := numrange(0.5,1)	
 		, temporal_distance_range:= sfti_makesfti(1820,1820,2000,2000)
 		, scale_distance_range := numrange(0,30) 
-		, optional_reference_geometry := ST_Buffer(ST_GeomFromText('POINT(652208.7 6861682.4)',2154),5)
-		, optional_spatial_distance_range := numrange(0,10000)
-) AS  f
+		, optional_reference_geometry := NULL-- ST_Buffer(ST_GeomFromText('POINT(652208.7 6861682.4)',2154),5)
+		, optional_spatial_distance_range := NULL -- numrange(0,10000)
+) AS  f  ;
+
+DROP TABLE IF EXISTS test_geocoding_coulisse ; 
+CREATE TABLE test_geocoding_coulisse AS
+SELECT gid, (postal_normalize(adresse))[1], source, fuzzy_date, f.*
+FROM test_extension.test_sample_adress
+	, historical_geocoding.geocode_name(
+	query_adress:= (postal_normalize(adresse))[1]
+	, query_date:= fuzzy_date
+	, target_scale_range := numrange(0,30)
+	, ordering_priority_function := '100 * semantic + 5 * temporal  + 0.01 * scale + 0.001 * spatial '
+		, semantic_distance_range := numrange(0.5,1)	
+		, temporal_distance_range:= sfti_makesfti(1820,1820,2000,2000)
+		, scale_distance_range := numrange(0,30) 
+		, optional_reference_geometry := NULL-- ST_Buffer(ST_GeomFromText('POINT(652208.7 6861682.4)',2154),5)
+		, optional_spatial_distance_range := NULL -- numrange(0,10000)
+		) AS  f 
+WHERE source = 'ras'; 
+--577
+-- 693   / 737
+SELECT 693/737.0; 
+--total : 920/971
+
+SELECT avg(temporal_score)
+FROM test_geocoding_coulisse ;
+
+DROP TABLE IF EXISTS test_spatial_repartiton_angelo_data ; 
+CREATE TABLE IF NOT EXISTS test_spatial_repartiton_angelo_data AS 
+SELECT row_number() over() as id , fuzzy_date::geometry
+FROM test_geocoding_coulisse as tg 
+
+SELECT count(*)
+FROM historical_geocoding.precise_localisation
+ 
+SELECT 920 / 965.0
+WITH adresses AS (
+SELECT   adresse, (postal_normalize(adresse))[1]
+FROM test_extension.test_sample_adress
+order by adresse asc
 
 
-	
+SELECT count(*)
+FROM test_extension.test_sample_adress
+WHERE source = 'ras'; 
 	
 -------------------------------------
 -------------------------------------
