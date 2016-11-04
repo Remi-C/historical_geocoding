@@ -283,6 +283,7 @@ RETURNS table(rank int,
 	, scale_score float
 	, spatial_score float
 	, aggregated_score float
+	, spatial_precision float
 	, confidence_in_result float) AS 
 	$BODY$
 		--@brief : this function takes an adress and date query, as well as a metric, and tries to find the best match in the database
@@ -305,12 +306,16 @@ RETURNS table(rank int,
 					 
 				, semantic_score::float, temporal_distance::float, scale_distance::float, spatial_distance::float
 				, aggregated_score::float
+				, spatial_precision::float
 				, 1::float AS confidence_in_result
 			FROM  historical_geocoding.precise_localisation AS rl 
 				LEFT OUTER JOIN geohistorical_object.historical_source as hs ON (rl.historical_source = hs.short_name)
+				LEFT OUTER JOIN geohistorical_object.numerical_origin_process as hs2 ON (rl.numerical_origin_process = hs2.short_name)
 				, COALESCE(similarity(normalised_name, $1), 0) AS semantic_score 
 				, COALESCE( (sfti_distance_asym(COALESCE(rl.specific_fuzzy_date,hs.default_fuzzy_date), $2) ).fuzzy_distance,0) AS temporal_distance
-				, least( abs((ST_MinimumBoundingRadius(geom)).radius  - lower($3)),abs((ST_MinimumBoundingRadius(geom)).radius  - upper($3))) AS scale_distance
+				, CAST( geohistorical_object.json_spatial_precision(hs.default_spatial_precision, ''number'')+geohistorical_object.json_spatial_precision(hs2.default_spatial_precision, ''number'') AS float) AS def_spatial_precision
+				, COALESCE(rl.specific_spatial_precision, def_spatial_precision) AS spatial_precision
+				, least( abs(sqrt(st_area(geom))  - lower($3)),abs(sqrt(st_area(geom)) - upper($3))) AS scale_distance
 				, COALESCE(ST_Distance($4::geometry, rl.geom),0) AS spatial_distance
 				, CAST (100*(1-semantic_score) + 0.1 * temporal_distance + 0.01 * scale_distance +  0.001 * spatial_distance AS float) AS aggregated_score
 				
@@ -334,8 +339,7 @@ LANGUAGE plpgsql  VOLATILE CALLED ON NULL INPUT;
 
 --SELECT set_limit(0.7) ;
 
-
-SELECT f.rank, f.normalised_name, f.historical_source, f.semantic_score, f.temporal_score, f.spatial_score, f.aggregated_score
+SELECT f.rank, f.normalised_name, f.historical_source, f.semantic_score, f.temporal_score, f.spatial_score, f.spatial_precision, f.aggregated_score
 FROM historical_geocoding.geocode_name(
 	query_adress:='44 rue saint jacques '
 	, query_date:= sfti_makesfti('1872-11-15'::date) -- sfti_makesftix(1872,1873,1880,1881)  -- sfti_makesfti('1972-11-15');
