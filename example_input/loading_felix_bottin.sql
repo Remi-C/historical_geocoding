@@ -120,7 +120,7 @@ WHERE val IS false
 	FROM bottin_cleaned
 		LEFT OUTER JOIN bottin_geocoded USING (gid)
 	WHERE confidence_in_result IS NULL
-	LIMIT 100
+	LIMIT 100 ; 
 
 
 	
