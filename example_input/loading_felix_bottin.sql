@@ -51,26 +51,29 @@ FROM bottin_geocoded
 
 -- starting geocoding : 
 
+-- SELECT set_limit(0.4) 
 DROP TABLE IF EXISTS bottin_geocoded ;
--- CREATE TABLE bottin_geocoded AS 
-INSERT INTO bottin_geocoded
+CREATE TABLE bottin_geocoded AS 
+-- INSERT INTO bottin_geocoded
 SELECT gid, bottin_id
 	, postal_normalize(addr) as normalised_target_addr
 	, f.* 
+	,  St_Multi(ST_Buffer(f.geom, f.spatial_precision))::geometry(multipolygon,2154) AS fuzzy_geom
 FROM bottin_cleaned
 	 ,CAST(street_number[1]::text||' '::text||street[1]::text AS text) AS addr
-	, historical_geocoding.geocode_name(
+	, historical_geocoding.geocode_name_optimised(
 		query_adress:=addr
 		, query_date:= fuzzy_date
-		, target_scale_range := numrange(0,30)
-		, ordering_priority_function := '100 * semantic + 5 * temporal  + 0.01 * scale + 0.001 * spatial '
-			, semantic_distance_range := numrange(0.5,1)	
-			, temporal_distance_range:= sfti_makesfti(1820,1820,2000,2000)
-			, scale_distance_range := numrange(0,30) 
-			, optional_reference_geometry := NULL-- ST_Buffer(ST_GeomFromText('POINT(652208.7 6861682.4)',2154),5)
-			, optional_spatial_distance_range := NULL -- numrange(0,10000)
-) AS  f 
-WHERE gid BETWEEN 4001 AND 10000 ;  
+		, use_precise_localisation := true  
+		, ordering_priority_function := '100*(semantic_distance) + 0.1 * temporal_distance + 0.1 *spatial_precision + 0.001 * scale_distance +  0.0001 * spatial_distance'
+		, max_number_of_candidates := 1
+		, max_semantic_distance := 0.3 
+		, temporal_distance_range:= sfti_makesfti(1820,1820,2000,2000)
+			, optional_scale_range := numrange(0,100)
+			, optional_reference_geometry := NULL -- ST_Buffer(ST_GeomFromText('POINT(652208.7 6861682.4)',2154),5)
+			, optional_max_spatial_distance := 10000
+) AS  f  ;
+--WHERE gid BETWEEN 4001 AND 4002;  
 -- 37min 37 sec
 -- SELECT 6308 / 6467.0 
 SELECT *

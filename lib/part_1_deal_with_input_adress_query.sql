@@ -294,6 +294,8 @@ RETURNS table(rank int,
 			_sql text := NULL ; 
 		BEGIN  
 			-- cleaning input?
+
+			
 			
 			_sql := 'SELECT (row_number() over())::int as rank,
 					 rl.historical_name ,

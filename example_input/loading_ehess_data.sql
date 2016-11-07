@@ -14,28 +14,28 @@ SET search_path to ehess_data, public ;
 -- starting by loading professiono data at 3 dates
 DROP TABLE IF EXISTS profession_raw ; 
 CREATE TABLE profession_raw (
-nl text,
-nfsource text,
-nlfs text,
-catP text,
-Professionobs text,
-profession text,
-Profession_complement text,
-detail text,
-NIND text,
-NOMOK text,
-indiv_titre text,
-type_rue text,
-article_rue text,
-nom_rue text,
-num_rue text,
-nom_immeuble text,
-date text,
-source text,
-NINDSUCC text,
-successeur_de text,
-autres_informations_geographiques text,
-autres_infos text
+	nl text,
+	nfsource text,
+	nlfs text,
+	catP text,
+	Professionobs text,
+	profession text,
+	Profession_complement text,
+	detail text,
+	NIND text,
+	NOMOK text,
+	indiv_titre text,
+	type_rue text,
+	article_rue text,
+	nom_rue text,
+	num_rue text,
+	nom_immeuble text,
+	date text,
+	source text,
+	NINDSUCC text,
+	successeur_de text,
+	autres_informations_geographiques text,
+	autres_infos text
 ) ;
 
 COPY profession_raw
@@ -207,7 +207,11 @@ LIMIT 4000 ;
 
  SELECT count(*)
  FROM prevenu_geocoded
- WHERE ville ilike 'paris'
+ WHERE ville ilike 'paris' ;
+
+ SELECT *
+ FROM prevenu_geocoded
+ LIMIT 10
 
  SELECT count(*)
  FROM prevenu_raw

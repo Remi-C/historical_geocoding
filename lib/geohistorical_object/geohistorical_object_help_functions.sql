@@ -56,6 +56,28 @@ SELECT geohistorical_object.is_valid_source_json(f1), geohistorical_object.is_va
 FROM CAST ( '{"default": 0.2, "road_axis":2.5, "building":0.9}' AS json )  as f1
 	, CAST ( '{ "road_axis":2.5, "building":0.9}' AS json )  as f2 ;
 
+
+
+
+DROP FUNCTION IF EXISTS geohistorical_object.json_spatial_precision(   IN ijson json, IN specific_field_name text ); 
+CREATE OR REPLACE FUNCTION geohistorical_object.json_spatial_precision(    IN ijson json , IN specific_field_name text)
+RETURNS float AS 
+	$BODY$
+		--@brief : this function takes the json of a geohistorical source / numerical process, and extract the spatial precision
+		-- @example : example '{"default": 0.2, "road":2.5, "building":0.9}'::json : 0.9 for building !
+		DECLARE       
+		BEGIN  
+			RETURN COALESCE(ijson ->> quote_ident(specific_field_name), ijson->>'default') ;
+		 
+		END ; 
+	$BODY$ 
+LANGUAGE plpgsql  IMMUTABLE STRICT; 
+
+
+SELECT geohistorical_object.json_spatial_precision(  ex , 'building'::text)
+FROM CAST ('{"default": 0.2, "road":2.5, "building":0.9}' AS json) AS ex ; 
+
+
 	  
 
 
